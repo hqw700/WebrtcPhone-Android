@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 云手机服务通常部署在内网/自签证书环境：
+     - 明文 HTTP 仅为兼容服务端 -tls=false 模式保留，UI 会明确标注“不安全连接”；
+     - 只信任系统 CA，不信任用户安装的 CA（防中间人代理）；自签证书改由应用内
+       指纹确认（TOFU 证书固定）放行，见 core.net.PinningTrustManager。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

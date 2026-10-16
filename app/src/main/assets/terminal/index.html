@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<link rel="stylesheet" href="xterm.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden; }
+  #terminal { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+</style>
+</head>
+<body>
+<div id="terminal"></div>
+<script src="xterm.js"></script>
+<script src="xterm-addon-fit.js"></script>
+<script>
+  var term = new Terminal({
+    cursorBlink: true,
+    cursorStyle: 'block',
+    fontSize: 13,
+    fontFamily: 'Menlo, Consolas, monospace',
+    theme: { background: 'rgba(20,20,35,0.80)', foreground: '#d4d4d4', cursor: '#aeafad' },
+    scrollback: 10000
+  });
+  var fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open(document.getElementById('terminal'));
+
+  // 键盘输入 -> native 桥（base64 编码保证 UTF-8/控制字符无损传输）
+  term.onData(function(d) {
+    AndroidBridge.write(btoa(unescape(encodeURIComponent(d))));
+  });
+
+  // 返回 "cols,rows"，供 native 侧组 init JSON
+  function fitTerminal() {
+    var el = document.getElementById('terminal');
+    el.style.height = window.innerHeight + 'px';
+    el.style.width = window.innerWidth + 'px';
+    try { fitAddon.fit(); } catch (e) {}
+    return term.cols + ',' + term.rows;
+  }
+
+  // native 侧收到 PTY 输出后调用（base64 -> Uint8Array -> xterm）
+  function termWrite(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    term.write(bytes);
+  }
+
+  function focusTerm() { term.focus(); }
+
+  window.addEventListener('resize', function() { fitTerminal(); });
+</script>
+</body>
+</html>
