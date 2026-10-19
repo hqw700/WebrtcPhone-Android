@@ -16,8 +16,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ScreenLockPortrait
 import androidx.compose.material.icons.outlined.Sync
@@ -41,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -246,14 +251,38 @@ fun CertificatesScreen(store: CertificatePinStore, onBack: () -> Unit) {
     }
 }
 
+private const val GITHUB_URL = "https://github.com/hqw700/ScrcpyOverWebRTC"
+private const val DOCS_URL = "https://webrtc-phone.com/docs/"
+private const val SITE_URL = "https://webrtc-phone.com"
+
 @Composable
 fun AboutScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    var showFeedback by remember { mutableStateOf(false) }
+    fun open(url: String) {
+        runCatching {
+            ctx.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure { android.widget.Toast.makeText(ctx, "无法打开链接", android.widget.Toast.LENGTH_SHORT).show() }
+    }
     SubScreen("关于", onBack) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
             SectionCard {
                 SettingRow("版本", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 SettingRow("包名", BuildConfig.APPLICATION_ID)
                 SettingRow("技术架构", "WebRTC P2P · H.264 硬解 · Opus · DataChannel")
+            }
+            SectionCard(title = "链接与支持") {
+                SettingRow("GitHub 开源仓库", "hqw700/ScrcpyOverWebRTC", icon = Icons.Outlined.Code,
+                    onClick = { open(GITHUB_URL) })
+                SettingRow("在线文档", "使用手册与部署指南", icon = Icons.Outlined.MenuBook,
+                    onClick = { open(DOCS_URL) })
+                SettingRow("联系作者", "官网 webrtc-phone.com", icon = Icons.Outlined.Email,
+                    onClick = { open(SITE_URL) })
+                SettingRow("意见反馈", "提交 Bug / 功能建议给作者", icon = Icons.Outlined.Feedback,
+                    onClick = { showFeedback = true })
             }
             SectionCard(title = "安全说明") {
                 Text(
@@ -273,4 +302,5 @@ fun AboutScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(24.dp))
         }
     }
+    if (showFeedback) FeedbackDialog(versionName = BuildConfig.VERSION_NAME, onDismiss = { showFeedback = false })
 }
