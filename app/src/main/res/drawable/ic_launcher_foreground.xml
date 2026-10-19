@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  穿云投屏 Logo 前景（矢量，稍放大并处于自适应安全区内）：
-  霓虹手机轮廓（青→紫渐变）+ 屏幕内云朵 + 投屏信号波。双层描边做辉光。
+  穿云投屏 Logo 前景（矢量）：霓虹手机轮廓（青→紫渐变）+ 屏幕内云朵 + 投屏信号波。
+  适中尺寸、四周留白，配深色圆角底板。双层描边做辉光。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -12,13 +12,13 @@
 
     <!-- 辉光底层 -->
     <path
-        android:strokeWidth="11"
-        android:strokeAlpha="0.4"
+        android:strokeWidth="8"
+        android:strokeAlpha="0.35"
         android:fillColor="#00000000"
         android:strokeLineJoin="round"
-        android:pathData="M33,15 L75,15 A11,11 0 0 1 86,26 L86,82 A11,11 0 0 1 75,93 L33,93 A11,11 0 0 1 22,82 L22,26 A11,11 0 0 1 33,15 Z">
+        android:pathData="M39,24 L69,24 A8,8 0 0 1 77,32 L77,76 A8,8 0 0 1 69,84 L39,84 A8,8 0 0 1 31,76 L31,32 A8,8 0 0 1 39,24 Z">
         <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="22" android:startY="15" android:endX="86" android:endY="93">
+            <gradient android:type="linear" android:startX="31" android:startY="24" android:endX="77" android:endY="84">
                 <item android:offset="0" android:color="#FF2BE6FF" />
                 <item android:offset="1" android:color="#FFB24BFF" />
             </gradient>
@@ -27,12 +27,12 @@
 
     <!-- 手机外框主线 -->
     <path
-        android:strokeWidth="5"
+        android:strokeWidth="3.6"
         android:fillColor="#00000000"
         android:strokeLineJoin="round"
-        android:pathData="M33,15 L75,15 A11,11 0 0 1 86,26 L86,82 A11,11 0 0 1 75,93 L33,93 A11,11 0 0 1 22,82 L22,26 A11,11 0 0 1 33,15 Z">
+        android:pathData="M39,24 L69,24 A8,8 0 0 1 77,32 L77,76 A8,8 0 0 1 69,84 L39,84 A8,8 0 0 1 31,76 L31,32 A8,8 0 0 1 39,24 Z">
         <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="22" android:startY="15" android:endX="86" android:endY="93">
+            <gradient android:type="linear" android:startX="31" android:startY="24" android:endX="77" android:endY="84">
                 <item android:offset="0" android:color="#FF4DEBFF" />
                 <item android:offset="1" android:color="#FFC06BFF" />
             </gradient>
@@ -40,29 +40,29 @@
     </path>
 
     <!-- 听筒 -->
-    <path android:strokeColor="#FF54ECFF" android:strokeWidth="4.4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M46,22.5 L62,22.5" />
+    <path android:strokeColor="#FF54ECFF" android:strokeWidth="3.2" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M48,30 L60,30" />
     <!-- Home 指示条 -->
-    <path android:strokeColor="#FFBE6CFF" android:strokeWidth="4.4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M46,85.5 L62,85.5" />
+    <path android:strokeColor="#FFBE6CFF" android:strokeWidth="3.2" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M48,78 L60,78" />
 
     <!-- 屏幕内：云朵 -->
     <path
-        android:strokeWidth="4.4"
+        android:strokeWidth="3.2"
         android:strokeColor="#FF8CD9FF"
         android:fillColor="#00000000"
         android:strokeLineJoin="round"
-        android:pathData="M39,67
-            A7,7 0 0 1 39.6,53.2
-            A8.6,8.6 0 0 1 56,51
-            A6,6 0 0 1 63,57
-            A5.5,5.5 0 0 1 62.2,67 Z" />
+        android:pathData="M44,62
+            A5,5 0 0 1 44.5,52.2
+            A6.2,6.2 0 0 1 56,50.7
+            A4.3,4.3 0 0 1 61,55
+            A3.9,3.9 0 0 1 60.5,62 Z" />
 
     <!-- 屏幕内：投屏信号波 -->
-    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M54.5,46 A7.6,7.6 0 0 1 62,53.5" />
-    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M54.5,39 A14.5,14.5 0 0 1 69,53.5" />
+    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="2.9" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M54.5,46.2 A5.4,5.4 0 0 1 59.8,51.6" />
+    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="2.9" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M54.5,41 A10.4,10.4 0 0 1 65,51.6" />
     <path android:fillColor="#FF8CD9FF"
-        android:pathData="M52.5,53.5 m-2.7,0 a2.7,2.7 0 1,0 5.4,0 a2.7,2.7 0 1,0 -5.4,0" />
+        android:pathData="M53,51.8 m-1.9,0 a1.9,1.9 0 1,0 3.8,0 a1.9,1.9 0 1,0 -3.8,0" />
 </vector>
