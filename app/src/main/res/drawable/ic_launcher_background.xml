@@ -1,11 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 透明背景：去掉原来的黑色方框，图标只保留霓虹手机图形 -->
+<!-- 深色圆角底板（径向深蓝紫渐变），自适应图标会按启动器形状裁切圆角。让霓虹图形在浅色启动器上也醒目。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#00000000"
-        android:pathData="M0,0h108v108h-108z"/>
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54" android:centerY="48"
+                android:gradientRadius="78">
+                <item android:offset="0" android:color="#FF1C2140" />
+                <item android:offset="1" android:color="#FF0C0E1C" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
