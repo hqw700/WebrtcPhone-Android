@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CastConnected
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
@@ -53,6 +54,7 @@ fun DeviceActionSheet(
     canShare: Boolean,
     onDismiss: () -> Unit,
     onOpen: () -> Unit,
+    onOpenWs: () -> Unit,
     onCamera: () -> Unit,
     onShare: () -> Unit,
     onTags: () -> Unit,
@@ -75,6 +77,11 @@ fun DeviceActionSheet(
             }
             Spacer(Modifier.height(8.dp))
             SettingRow("进入投屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onOpen() })
+            SettingRow(
+                "WS 模式投屏", "WebSocket 中转，免 P2P 穿透（视频+直控）",
+                icon = Icons.Outlined.Bolt, enabled = device.online,
+                onClick = { onDismiss(); onOpenWs() }
+            )
             SettingRow(
                 "摄像头监控", "使用云手机摄像头作为画面，含环境音",
                 icon = Icons.Outlined.Videocam, enabled = device.online,

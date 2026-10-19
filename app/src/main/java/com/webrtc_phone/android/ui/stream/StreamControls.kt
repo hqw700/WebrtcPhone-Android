@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flip
@@ -47,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -86,9 +89,27 @@ fun NavKeys(vm: StreamViewModel, vertical: Boolean) {
     }
 }
 
-/** 可拖动悬浮球：点击展开工具面板，拖动后吸附屏幕左右边缘 */
+/**
+ * 左侧边缘把手：常驻显示，点击打开“切换设备”侧边栏。
+ * 只做点击不做滑动，避免与云手机自身的边缘返回手势冲突。
+ */
 @Composable
-fun FloatingBall(onClick: () -> Unit) {
+fun DrawerHandle(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(width = 22.dp, height = 64.dp)
+            .background(Color(0xCC1F2633), androidx.compose.foundation.shape.RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp))
+            .combinedClickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.ChevronRight, "切换设备", tint = Color.White, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** 可拖动悬浮球：点击展开工具面板，长按打开设备侧边栏，拖动后吸附屏幕左右边缘 */
+@Composable
+fun FloatingBall(onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+    val haptic = LocalHapticFeedback.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val ballPx = with(density) { 48.dp.toPx() }
@@ -106,7 +127,10 @@ fun FloatingBall(onClick: () -> Unit) {
                     onDrag = { dx, dy -> x = (x + dx).coerceIn(0f, maxX); y = (y + dy).coerceIn(0f, maxY) },
                     onEnd = { x = if (x + ballPx / 2 < constraints.maxWidth / 2f) 0f else maxX },
                 )
-                .combinedClickable(onClick = onClick),
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick?.let { cb -> { haptic.performHapticFeedback(HapticFeedbackType.LongPress); cb() } },
+                ),
             contentAlignment = Alignment.Center
         ) {
             Icon(Icons.Filled.Apps, "工具", tint = Color.White)

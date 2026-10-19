@@ -7,6 +7,7 @@ import com.webrtc_phone.android.core.net.ApiException
 import com.webrtc_phone.android.core.net.ServerEndpoint
 import com.webrtc_phone.android.data.model.AuthSession
 import com.webrtc_phone.android.data.model.Device
+import com.webrtc_phone.android.data.model.TagsPayload
 import com.webrtc_phone.android.data.repo.DeviceRepository
 import com.webrtc_phone.android.rtc.CameraParams
 import com.webrtc_phone.android.rtc.StreamAuth
@@ -28,7 +29,28 @@ data class DeviceFilter(
     val query: String = "",
     val status: StatusFilter = StatusFilter.ALL,
     val tagIds: Set<String> = emptySet(),
-)
+) {
+    /**
+     * 纯函数过滤判断：状态 + 标签筛选 + 搜索（命中 设备 ID / 型号 / 标签名）。
+     * 抽出来便于单测，UI 的 combine 直接调用。
+     */
+    fun matches(d: Device, tags: TagsPayload): Boolean {
+        val statusOk = when (status) {
+            StatusFilter.ALL -> true
+            StatusFilter.ONLINE -> d.online
+            StatusFilter.IN_USE -> d.online && d.inUse
+            StatusFilter.OFFLINE -> !d.online
+        }
+        if (!statusOk) return false
+        val devTagIds = tags.deviceTags[d.id].orEmpty()
+        if (tagIds.isNotEmpty() && devTagIds.none { it in tagIds }) return false
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return true
+        return d.id.lowercase().contains(q) ||
+            d.info.title.lowercase().contains(q) ||
+            devTagIds.any { id -> tags.tags.firstOrNull { it.id == id }?.name?.lowercase()?.contains(q) == true }
+    }
+}
 
 /** 首页（设备 / 管理 / 我的）共享的会话级 ViewModel */
 class HomeViewModel(private val c: AppContainer, val session: AuthSession) : ViewModel() {
@@ -50,18 +72,7 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
     val filter: StateFlow<DeviceFilter> = _filter.asStateFlow()
 
     val filtered: StateFlow<List<Device>> = combine(devices, _filter, tags) { list, f, t ->
-        val q = f.query.trim().lowercase()
-        list.filter { d ->
-            val statusOk = when (f.status) {
-                StatusFilter.ALL -> true
-                StatusFilter.ONLINE -> d.online
-                StatusFilter.IN_USE -> d.online && d.inUse
-                StatusFilter.OFFLINE -> !d.online
-            }
-            val tagOk = f.tagIds.isEmpty() || (t.deviceTags[d.id].orEmpty().any { it in f.tagIds })
-            val qOk = q.isEmpty() || d.id.lowercase().contains(q) || d.info.title.lowercase().contains(q)
-            statusOk && tagOk && qOk
-        }
+        list.filter { f.matches(it, t) }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -80,7 +91,7 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
 
     fun setGridColumns(n: Int) = c.settings.updateApp { it.copy(gridColumns = n) }
 
-    fun targetFor(d: Device, camera: CameraParams? = null): StreamTarget {
+    fun targetFor(d: Device, camera: CameraParams? = null, transport: com.webrtc_phone.android.rtc.StreamTransport = com.webrtc_phone.android.rtc.StreamTransport.WEBRTC): StreamTarget {
         val policy = me.value?.policy
         return StreamTarget(
             endpoint = endpoint,
@@ -91,6 +102,7 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
             allowTerminal = policy?.forbidTerminal != true,
             mode = if (camera != null) StreamMode.Camera(camera) else StreamMode.Screen,
             settings = c.settings.stream.value,
+            transport = transport,
             displayHint = d.info.primaryDisplay?.let { it.width to it.height },
         )
     }

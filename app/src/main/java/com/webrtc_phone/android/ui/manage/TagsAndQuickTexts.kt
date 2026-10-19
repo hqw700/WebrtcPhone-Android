@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.webrtc_phone.android.core.net.ApiException
 import com.webrtc_phone.android.data.model.QuickText
 import com.webrtc_phone.android.data.model.Tag
+import com.webrtc_phone.android.data.model.TagOps
 import com.webrtc_phone.android.data.repo.DeviceRepository
 import com.webrtc_phone.android.data.repo.QuickTextRepository
 import com.webrtc_phone.android.ui.common.ConfirmDialog
@@ -109,7 +110,7 @@ fun TagsScreen(repo: DeviceRepository, onBack: () -> Unit) {
     }
 
     editing?.let { t ->
-        TagEditDialog(t, onDismiss = { editing = null }) { nt -> editing = null; run("已保存") { repo.upsertTag(nt) } }
+        TagEditDialog(t, existing = tags.tags, onDismiss = { editing = null }) { nt -> editing = null; run("已保存") { repo.upsertTag(nt) } }
     }
     deleting?.let { t ->
         ConfirmDialog("删除标签", "删除「${t.name}」？设备不会被删除。", "删除", destructive = true,
@@ -119,15 +120,23 @@ fun TagsScreen(repo: DeviceRepository, onBack: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun TagEditDialog(tag: Tag, onDismiss: () -> Unit, onSave: (Tag) -> Unit) {
+private fun TagEditDialog(tag: Tag, existing: List<Tag>, onDismiss: () -> Unit, onSave: (Tag) -> Unit) {
     var name by remember { mutableStateOf(tag.name) }
     var color by remember { mutableStateOf(tag.color) }
+    val trimmed = name.trim()
+    // 重名校验：trim + 忽略大小写，排除自身。服务端对标签名无唯一约束，重名会导致筛选/卡片歧义，故在客户端拦截。
+    val duplicate = TagOps.isDuplicateName(existing, name, tag.id)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (tag.name.isEmpty()) "新建标签" else "编辑标签") },
         text = {
             Column {
-                OutlinedTextField(name, { name = it.take(20) }, label = { Text("名称") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    name, { name = it.take(20) }, label = { Text("名称") }, singleLine = true,
+                    isError = duplicate,
+                    supportingText = if (duplicate) ({ Text("已存在同名标签") }) else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(12.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TagPalette.forEach { c ->
@@ -140,7 +149,7 @@ private fun TagEditDialog(tag: Tag, onDismiss: () -> Unit, onSave: (Tag) -> Unit
                 }
             }
         },
-        confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onSave(tag.copy(name = name.trim(), color = color)) }) { Text("保存") } },
+        confirmButton = { Button(enabled = trimmed.isNotEmpty() && !duplicate, onClick = { onSave(tag.copy(name = trimmed, color = color)) }) { Text("保存") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }

@@ -97,6 +97,83 @@ data class TagsPayload(
     }
 }
 
+/** 标签增删改的纯函数集合（无副作用，便于单测）。所有写操作统一走这里，保证本地乐观更新与服务端语义一致。 */
+object TagOps {
+    /** 新增或按 id 覆盖一个标签 */
+    fun upsert(p: TagsPayload, tag: Tag): TagsPayload {
+        val exists = p.tags.any { it.id == tag.id }
+        val tags = if (exists) p.tags.map { if (it.id == tag.id) tag else it } else p.tags + tag
+        return p.copy(tags = tags)
+    }
+
+    /** 删除标签定义，并从所有设备映射中移除该标签；映射清空的设备条目一并删除 */
+    fun delete(p: TagsPayload, tagId: String): TagsPayload = TagsPayload(
+        tags = p.tags.filterNot { it.id == tagId },
+        deviceTags = p.deviceTags.mapValues { (_, ids) -> ids - tagId }.filterValues { it.isNotEmpty() },
+    )
+
+    /** 设置某设备的标签集合；空集合等价于删除该设备的映射条目 */
+    fun setDeviceTags(p: TagsPayload, deviceId: String, tagIds: List<String>): TagsPayload {
+        val map = p.deviceTags.toMutableMap()
+        if (tagIds.isEmpty()) map.remove(deviceId) else map[deviceId] = tagIds
+        return p.copy(deviceTags = map)
+    }
+
+    /** 重名判断：trim + 忽略大小写，排除自身 id */
+    fun isDuplicateName(tags: List<Tag>, name: String, selfId: String?): Boolean {
+        val n = name.trim()
+        if (n.isEmpty()) return false
+        return tags.any { it.id != selfId && it.name.trim().equals(n, ignoreCase = true) }
+    }
+}
+
+/** 服务器盘（downloads/ 目录）中的一个文件。服务器中转模式下先上传到这里，再下发到设备。 */
+data class ServerFile(
+    val name: String,
+    val size: Long,
+    val updatedAt: Long,
+    /** 服务端相对下载路径，如 /downloads/xxx（仅参考，实际下发用签名 URL） */
+    val url: String,
+    val owner: String,
+)
+
+/** 批量任务里单台设备的子任务状态 */
+data class SubTaskStatus(
+    val deviceId: String,
+    val status: String,   // queued / running / success / failed（服务端/agent 约定）
+    val progress: Int,
+    val result: String,
+) {
+    val finished: Boolean get() = status.equals("success", true) || status.equals("failed", true) ||
+        status.equals("done", true) || status.equals("error", true) || status.equals("completed", true)
+    val ok: Boolean get() = status.equals("success", true) || status.equals("done", true) || status.equals("completed", true)
+}
+
+/** /api/tasks/details 的解析结果 */
+data class TaskDetails(
+    val taskId: String,
+    val type: String,
+    val devices: Map<String, SubTaskStatus>,
+)
+
+/** 服务器中转任务类型：apk 走安装，其它走推送到 dest_path */
+enum class ServerTaskType(val wire: String) { INSTALL("install"), PUSH_FILE("push_file") }
+
+/** 服务器中转文件下发的纯逻辑助手（便于单测） */
+object ServerFileOps {
+    /** apk 文件名 → install；否则 push_file */
+    fun taskTypeFor(fileName: String): ServerTaskType =
+        if (fileName.trim().endsWith(".apk", ignoreCase = true)) ServerTaskType.INSTALL else ServerTaskType.PUSH_FILE
+
+    /** push_file 的默认目标路径：/sdcard/Download/<name> */
+    fun defaultDestPath(fileName: String): String = "/sdcard/Download/" + fileName.trim().substringAfterLast('/')
+
+    /** 由服务端返回的相对签名 URL 组装绝对下发 URL（payload），对齐 Web 端 location.protocol+host+url */
+    fun absoluteUrl(httpBase: String, signedPath: String): String =
+        if (signedPath.startsWith("http://") || signedPath.startsWith("https://")) signedPath
+        else httpBase.trimEnd('/') + "/" + signedPath.trimStart('/')
+}
+
 data class QuickText(
     val id: String,
     val title: String,
@@ -148,20 +225,6 @@ data class ShareCreated(
     val cardCode: String,
     val shareUrl: String,
     val expiresAt: Long?,
-)
-
-/** 卡密兑换结果：用于免登录访客直连 */
-data class CardRedeemResult(
-    val token: String,
-    val cardCode: String,
-    val deviceId: String,
-    val deviceName: String,
-    val online: Boolean,
-    val accessMode: AccessMode,
-    val expiresAt: Long?,
-    val remainingSeconds: Long,
-    val allowClipboard: Boolean,
-    val allowFileTx: Boolean,
 )
 
 data class AdminUser(

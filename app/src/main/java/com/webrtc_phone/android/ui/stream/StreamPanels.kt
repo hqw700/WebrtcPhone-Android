@@ -71,8 +71,24 @@ data class ToolItem(
 /** 工具面板：宫格按钮 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ToolGrid(sections: List<Pair<String, List<ToolItem>>>) {
+fun ToolGrid(vm: StreamViewModel, sections: List<Pair<String, List<ToolItem>>>) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+        // 面板顶部：设备名 + 连接模式标识（替代原来顶部画面上的徽标）
+        Row(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                vm.target.deviceName.ifBlank { vm.target.deviceId },
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            com.webrtc_phone.android.ui.common.Pill(
+                if (vm.target.isWs) "WS 中转" else "WebRTC 直连",
+                if (vm.target.isWs) com.webrtc_phone.android.ui.theme.AppColors.Brand else com.webrtc_phone.android.ui.theme.AppColors.Online,
+                filled = true,
+            )
+        }
         sections.forEach { (title, items) ->
             Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
             FlowRow(Modifier.padding(horizontal = 8.dp), maxItemsInEachRow = 5) {

@@ -164,19 +164,6 @@ object Parsers {
         expiresAt = Rfc3339.parse(o.optStringOrNull("expires_at")),
     )
 
-    fun cardRedeem(o: JSONObject) = CardRedeemResult(
-        token = o.optString("token"),
-        cardCode = o.optString("card_code"),
-        deviceId = o.optString("device_id"),
-        deviceName = o.optString("device_name").ifBlank { o.optString("device_id") },
-        online = o.optBoolean("online", true),
-        accessMode = AccessMode.of(o.optString("access_mode")),
-        expiresAt = Rfc3339.parse(o.optStringOrNull("expires_at")),
-        remainingSeconds = o.optLong("remaining_seconds", -1),
-        allowClipboard = o.optBoolean("allow_clipboard", true),
-        allowFileTx = o.optBoolean("allow_file_tx", true),
-    )
-
     fun adminUsers(arr: JSONArray?): List<AdminUser> = arr.objects().map {
         AdminUser(
             username = it.optString("username"),
@@ -186,6 +173,43 @@ object Parsers {
             activeDevices = it.optJSONArray("active_devices").strings(),
             expiresAt = Rfc3339.parse(it.optStringOrNull("expires_at")),
             policy = policy(it),
+        )
+    }
+
+    /** /api/files 返回数组 [{name,size,updated_at,url,owner,uploaded_at}] */
+    fun serverFiles(body: String): List<ServerFile> {
+        val t = body.trim()
+        if (t.isEmpty() || t == "null") return emptyList()
+        val arr = JSONArray(t)
+        return arr.objects().map {
+            ServerFile(
+                name = it.optString("name"),
+                size = it.optLong("size"),
+                updatedAt = Rfc3339.parse(it.optStringOrNull("updated_at")) ?: 0L,
+                url = it.optString("url"),
+                owner = it.optString("owner"),
+            )
+        }.filter { it.name.isNotBlank() }.sortedByDescending { it.updatedAt }
+    }
+
+    /** /api/tasks/details 返回 BatchTask：{task_id,type,devices:{id:{device_id,status,progress,result}}} */
+    fun taskDetails(o: JSONObject): TaskDetails {
+        val devs = mutableMapOf<String, SubTaskStatus>()
+        o.optJSONObject("devices")?.let { d ->
+            for (k in d.keys()) {
+                val s = d.optJSONObject(k) ?: continue
+                devs[k] = SubTaskStatus(
+                    deviceId = s.optString("device_id", k),
+                    status = s.optString("status"),
+                    progress = s.optInt("progress"),
+                    result = s.optString("result"),
+                )
+            }
+        }
+        return TaskDetails(
+            taskId = o.optString("task_id"),
+            type = o.optString("type"),
+            devices = devs,
         )
     }
 }

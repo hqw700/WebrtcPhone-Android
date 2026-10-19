@@ -29,6 +29,9 @@ sealed interface StreamMode {
     data class Camera(val params: CameraParams) : StreamMode
 }
 
+/** 投屏传输方式：WebRTC P2P 或 WS（WebSocket H.264 中转，免穿透） */
+enum class StreamTransport { WEBRTC, WEBSOCKET }
+
 /** 一次投屏会话的全部输入参数（不可变；修改画质/镜头 = 以新 target 重连） */
 data class StreamTarget(
     val endpoint: ServerEndpoint,
@@ -41,10 +44,13 @@ data class StreamTarget(
     val allowTerminal: Boolean = true,
     val mode: StreamMode = StreamMode.Screen,
     val settings: StreamSettings = StreamSettings(),
+    /** 传输方式：WebRTC（默认）或 WS 中转。WS 模式仅视频+输入，无音频/文件/终端。 */
+    val transport: StreamTransport = StreamTransport.WEBRTC,
     /** 设备列表里已知的分辨率，首帧到达前用于占位比例 */
     val displayHint: Pair<Int, Int>? = null,
 ) {
     val viewOnly: Boolean get() = accessMode == AccessMode.VIEW_ONLY
     val isGuest: Boolean get() = auth is StreamAuth.Share
     val isCamera: Boolean get() = mode is StreamMode.Camera
+    val isWs: Boolean get() = transport == StreamTransport.WEBSOCKET
 }

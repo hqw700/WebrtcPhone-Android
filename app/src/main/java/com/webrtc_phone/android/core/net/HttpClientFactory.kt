@@ -53,6 +53,8 @@ class HttpClientFactory(private val pinStore: CertificatePinStore) {
             val tm = PinningTrustManager(endpoint.key, pinStore)
             val ssl = SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), null) }
             b.sslSocketFactory(ssl.socketFactory, tm).hostnameVerifier(tm.hostnameVerifier())
+            // 拆分 ClientHello，规避部分网络对单包 SNI 的拦截（见 FragmentingSocketFactory）
+            b.socketFactory(FragmentingSocketFactory())
         }
         return b.build()
     }

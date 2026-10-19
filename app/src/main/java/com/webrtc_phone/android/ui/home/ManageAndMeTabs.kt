@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.ShortText
 import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DriveFolderUpload
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Info
@@ -49,6 +50,7 @@ object Routes {
     const val USERS = "users"
     const val TAGS = "tags"
     const val QUICK_TEXTS = "quick_texts"
+    const val BATCH_FILES = "batch_files"
     const val STREAM_SETTINGS = "stream_settings"
     const val APP_SETTINGS = "app_settings"
     const val CERTS = "certs"
@@ -74,6 +76,9 @@ fun ManageTab(vm: HomeViewModel, navigate: (String) -> Unit) {
         SectionCard(title = "设备组织") {
             SettingRow("标签管理", "${tags.tags.size} 个标签", Icons.Outlined.Label, onClick = { navigate(Routes.TAGS) })
             SettingRow("快捷文本", "投屏时一键下发常用文本", Icons.AutoMirrored.Outlined.ShortText, onClick = { navigate(Routes.QUICK_TEXTS) })
+        }
+        SectionCard(title = "批量操作") {
+            SettingRow("批量文件分发", "上传文件后一键安装/推送到多台设备", Icons.Outlined.DriveFolderUpload, onClick = { navigate(Routes.BATCH_FILES) })
         }
     }
 }

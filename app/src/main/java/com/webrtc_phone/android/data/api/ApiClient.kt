@@ -44,6 +44,13 @@ class ApiClient(
     suspend fun delete(path: String): String =
         execute(Request.Builder().url(endpoint.url(path)).delete(), true)
 
+    /**
+     * 原始字节流 POST（服务器中转上传用）。body 已是构造好的 RequestBody（可带进度回调）。
+     * 复用统一的鉴权头与错误归一化。
+     */
+    suspend fun postRaw(path: String, body: okhttp3.RequestBody): String =
+        execute(Request.Builder().url(endpoint.url(path)).post(body), auth = true)
+
     /** `{code,msg,data}` 信封：code!=0 抛 Business，返回整个对象供调用方取 data */
     suspend fun postEnvelope(path: String, body: JSONObject, auth: Boolean = true): JSONObject =
         envelope(post(path, body, auth))

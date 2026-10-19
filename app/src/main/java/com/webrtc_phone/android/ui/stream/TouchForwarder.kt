@@ -42,7 +42,6 @@ class TouchForwarder(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View, e: MotionEvent): Boolean {
         if (vm.target.viewOnly || vm.target.isCamera) return false
-        val session = vm.session.value ?: return true
         val m = mapper(v) ?: return true
         val (w, h) = targetSize() ?: return true
 
@@ -50,7 +49,7 @@ class TouchForwarder(
         if (e.isFromSource(InputDevice.SOURCE_MOUSE) && e.actionMasked == MotionEvent.ACTION_DOWN &&
             (e.buttonState and MotionEvent.BUTTON_SECONDARY) != 0
         ) {
-            session.input.press(Keys.BACK)
+            vm.press(Keys.BACK)
             return true
         }
 
@@ -61,14 +60,14 @@ class TouchForwarder(
                 val p = m.map(e.getX(i), e.getY(i), clamp = false) ?: return true
                 activePointers += id
                 if (e.actionMasked == MotionEvent.ACTION_DOWN) haptic()
-                session.input.touch(id, TouchAction.DOWN, p.first, p.second, w, h)
+                vm.touch(id, TouchAction.DOWN, p.first, p.second, w, h)
             }
             MotionEvent.ACTION_MOVE -> {
                 for (i in 0 until e.pointerCount) {
                     val id = e.getPointerId(i)
                     if (id !in activePointers) continue
                     val p = m.map(e.getX(i), e.getY(i), clamp = true) ?: continue
-                    session.input.touch(id, TouchAction.MOVE, p.first, p.second, w, h)
+                    vm.touch(id, TouchAction.MOVE, p.first, p.second, w, h)
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
@@ -76,7 +75,7 @@ class TouchForwarder(
                 val id = e.getPointerId(i)
                 if (activePointers.remove(id)) {
                     val p = m.map(e.getX(i), e.getY(i), clamp = true) ?: return true
-                    session.input.touch(id, TouchAction.UP, p.first, p.second, w, h)
+                    vm.touch(id, TouchAction.UP, p.first, p.second, w, h)
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -84,7 +83,7 @@ class TouchForwarder(
                     val id = e.getPointerId(i)
                     if (!activePointers.remove(id)) continue
                     val p = m.map(e.getX(i), e.getY(i), clamp = true) ?: continue
-                    session.input.touch(id, TouchAction.CANCEL, p.first, p.second, w, h)
+                    vm.touch(id, TouchAction.CANCEL, p.first, p.second, w, h)
                 }
                 activePointers.clear()
             }
@@ -94,13 +93,12 @@ class TouchForwarder(
 
     override fun onGenericMotion(v: View, e: MotionEvent): Boolean {
         if (e.actionMasked != MotionEvent.ACTION_SCROLL || vm.target.viewOnly || vm.target.isCamera) return false
-        val session = vm.session.value ?: return false
         val m = mapper(v) ?: return false
         val (w, h) = targetSize() ?: return false
         val p = m.map(e.x, e.y, clamp = true) ?: return false
         val vs = e.getAxisValue(MotionEvent.AXIS_VSCROLL)
         val hs = e.getAxisValue(MotionEvent.AXIS_HSCROLL)
-        session.input.scroll(p.first, p.second, w, h, Math.round(hs), Math.round(vs))
+        vm.scroll(p.first, p.second, w, h, Math.round(hs), Math.round(vs))
         return true
     }
 }

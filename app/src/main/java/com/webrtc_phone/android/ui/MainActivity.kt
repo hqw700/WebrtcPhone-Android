@@ -12,7 +12,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,6 +29,8 @@ import com.webrtc_phone.android.ui.home.Routes
 import com.webrtc_phone.android.ui.login.LoginScreen
 import com.webrtc_phone.android.ui.login.LoginViewModel
 import com.webrtc_phone.android.ui.manage.QuickTextsScreen
+import com.webrtc_phone.android.ui.manage.BatchFilesScreen
+import com.webrtc_phone.android.ui.manage.BatchFilesViewModel
 import com.webrtc_phone.android.ui.manage.SharesScreen
 import com.webrtc_phone.android.ui.manage.SharesViewModel
 import com.webrtc_phone.android.ui.manage.TagsScreen
@@ -39,7 +40,6 @@ import com.webrtc_phone.android.ui.settings.AboutScreen
 import com.webrtc_phone.android.ui.settings.AppSettingsScreen
 import com.webrtc_phone.android.ui.settings.CertificatesScreen
 import com.webrtc_phone.android.ui.settings.StreamSettingsScreen
-import com.webrtc_phone.android.ui.stream.StreamLauncher
 import com.webrtc_phone.android.ui.theme.WebrtcPhoneTheme
 
 class MainActivity : ComponentActivity() {
@@ -67,11 +67,6 @@ private fun Root(c: AppContainer) {
     val s = session
     if (s == null) {
         val vm: LoginViewModel = viewModel(key = "login") { LoginViewModel(c) }
-        val guest by vm.guestTarget.collectAsStateWithLifecycle()
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        LaunchedEffect(guest) {
-            guest?.let { StreamLauncher.launch(ctx, it); vm.consumeGuestTarget() }
-        }
         LoginScreen(vm)
     } else {
         LoggedIn(c, s)
@@ -114,6 +109,13 @@ private fun LoggedIn(c: AppContainer, s: AuthSession) {
         }
         composable(Routes.TAGS) { TagsScreen(vm.repo) { nav.popBackStack() } }
         composable(Routes.QUICK_TEXTS) { QuickTextsScreen(vm.quickTexts) { nav.popBackStack() } }
+        composable(Routes.BATCH_FILES) {
+            val scope = c.userScope()
+            if (scope != null) {
+                val bvm: BatchFilesViewModel = viewModel { BatchFilesViewModel(c.appContext, scope.serverFiles, scope.devices) }
+                BatchFilesScreen(bvm) { nav.popBackStack() }
+            }
+        }
         composable(Routes.STREAM_SETTINGS) { StreamSettingsScreen(c.settings, me?.policy) { nav.popBackStack() } }
         composable(Routes.APP_SETTINGS) { AppSettingsScreen(c.settings) { nav.popBackStack() } }
         composable(Routes.CERTS) { CertificatesScreen(c.pinStore) { nav.popBackStack() } }

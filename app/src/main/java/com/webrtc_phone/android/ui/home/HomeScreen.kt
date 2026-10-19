@@ -141,6 +141,7 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
             canShare = vm.session.isAdmin && me?.policy?.forbidShare != true,
             onDismiss = { actionFor = null },
             onOpen = { launch(vm.targetFor(d)) },
+            onOpenWs = { launch(vm.targetFor(d, transport = com.webrtc_phone.android.rtc.StreamTransport.WEBSOCKET)) },
             onCamera = { cameraFor = d },
             onShare = { navigate(Routes.shares(d.id, create = true)) },
             onTags = { tagsFor = d },

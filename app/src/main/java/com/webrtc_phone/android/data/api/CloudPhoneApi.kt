@@ -3,7 +3,6 @@ package com.webrtc_phone.android.data.api
 import android.net.Uri
 import com.webrtc_phone.android.data.model.AdminUser
 import com.webrtc_phone.android.data.model.AdminUserCreate
-import com.webrtc_phone.android.data.model.CardRedeemResult
 import com.webrtc_phone.android.data.model.Device
 import com.webrtc_phone.android.data.model.Me
 import com.webrtc_phone.android.data.model.Parsers
@@ -71,6 +70,45 @@ class CloudPhoneApi(val client: ApiClient) {
         client.post("/api/quick_texts", Parsers.quickTextsToJson(list))
     }
 
+    // ---------- 服务器中转文件（上传到服务器盘 → 下发到设备） ----------
+
+    /** 列出服务器盘文件（admin 看全部，普通用户看自己上传的） */
+    suspend fun serverFiles(): List<com.webrtc_phone.android.data.model.ServerFile> =
+        ApiClient.parse { Parsers.serverFiles(client.get("/api/files")) }
+
+    /** 上传文件到服务器盘：POST /upload?name=<name>，原始字节流 + 进度回调 */
+    suspend fun uploadServerFile(name: String, body: okhttp3.RequestBody) {
+        client.postRaw("/upload?name=" + Uri.encode(name), body)
+    }
+
+    /** 获取服务器文件的限时签名下载相对路径（如 /downloads/x?sig=&exp=） */
+    suspend fun serverFileSignedUrl(name: String): String = ApiClient.parse {
+        JSONObject(client.get("/api/files/url?name=" + Uri.encode(name))).optString("url")
+    }
+
+    /** 删除服务器盘文件 */
+    suspend fun deleteServerFile(name: String) {
+        client.delete("/api/files?name=" + Uri.encode(name))
+    }
+
+    /**
+     * 创建下发任务（install / push_file）。payload 为绝对签名 URL，dest_path 仅 push_file 用。
+     * 返回 task_id。非 shell 任务服务端限管理员。
+     */
+    suspend fun createFileTask(type: String, targets: List<String>, payload: String, destPath: String): String {
+        val body = JSONObject()
+            .put("type", type)
+            .put("targets", JSONArray(targets))
+            .put("payload", payload)
+            .put("dest_path", destPath)
+        val resp = JSONObject(client.post("/api/tasks", body))
+        return ApiClient.parse { resp.optString("task_id") }
+    }
+
+    /** 轮询任务详情 */
+    suspend fun taskDetails(taskId: String): com.webrtc_phone.android.data.model.TaskDetails =
+        ApiClient.parse { Parsers.taskDetails(JSONObject(client.get("/api/tasks/details?task_id=" + Uri.encode(taskId)))) }
+
     // ---------- 分享 / 卡密 ----------
 
     suspend fun createShare(req: ShareCreateRequest): ShareCreated {
@@ -108,14 +146,6 @@ class CloudPhoneApi(val client: ApiClient) {
             "/api/share/extend",
             JSONObject().put("token", token).put("extend_seconds", extendSeconds)
         )
-    }
-
-    /** 公开接口：卡密兑换（访客免登录） */
-    suspend fun redeemCard(cardCode: String, password: String): CardRedeemResult {
-        val body = JSONObject().put("card_code", cardCode.trim().uppercase())
-        if (password.isNotEmpty()) body.put("password", password)
-        val o = client.postEnvelope("/api/share/redeem_card", body, auth = false)
-        return ApiClient.parse { Parsers.cardRedeem(o.getJSONObject("data")) }
     }
 
     fun shareLink(token: String): String = client.endpoint.url("/share?token=" + Uri.encode(token))

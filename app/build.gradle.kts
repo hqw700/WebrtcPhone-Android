@@ -6,8 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// 版本号取仓库根目录 VERSION 文件（与其他组件保持一致），缺省 1.0.0
-val appVersionName: String = run {
+// 基础版本号取仓库根目录 VERSION 文件（跟随 cloudphone，各组件一致），缺省 1.0.0
+val baseVersionName: String = run {
     var dir: File? = rootProject.rootDir
     while (dir != null) {
         val f = File(dir, "VERSION")
@@ -20,8 +20,16 @@ val appVersionName: String = run {
     "1.0.0"
 }
 
-val appVersionCode: Int = appVersionName.split(".")
-    .fold(0) { acc, part -> acc * 100 + (part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0) }
+// WebrtcPhone 本地打包号：每次打包在 build.number 里递增，versionName 形如 0.4.2-1。
+// 基础版本仍跟随 cloudphone VERSION，不在本仓库复制。build.number 缺省 0（无后缀）。
+val buildNumber: Int = rootProject.file("build.number")
+    .takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull() ?: 0
+
+val appVersionName: String = if (buildNumber > 0) "$baseVersionName-$buildNumber" else baseVersionName
+
+// versionCode = 基础版本数字拼接 * 1000 + 打包号，保证每次打包单调递增
+val appVersionCode: Int = (baseVersionName.split(".")
+    .fold(0) { acc, part -> acc * 100 + (part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0) } * 1000 + buildNumber)
     .coerceAtLeast(1)
 
 val localProps = Properties().apply {

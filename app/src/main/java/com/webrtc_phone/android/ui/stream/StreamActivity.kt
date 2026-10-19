@@ -46,7 +46,8 @@ import java.util.Locale
 class StreamActivity : ComponentActivity() {
 
     private lateinit var vm: StreamViewModel
-    private lateinit var renderer: SurfaceViewRenderer
+    private var renderer: SurfaceViewRenderer? = null
+    private lateinit var videoView: android.view.View
     private var lastBackAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,19 +64,33 @@ class StreamActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideSystemBars()
 
-        renderer = SurfaceViewRenderer(this).apply {
-            init(vm.eglContext, null)
-            setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-            // 交给硬件合成器缩放，比 GL 逐帧缩放更省电、延迟更低
-            setEnableHardwareScaler(true)
-            isFocusable = true
-            isFocusableInTouchMode = true
+        videoView = if (target.isWs) {
+            // WS 模式：H.264 由 MediaCodec 解码到 SurfaceView
+            android.view.SurfaceView(this).apply {
+                isFocusable = true
+                isFocusableInTouchMode = true
+                holder.addCallback(object : android.view.SurfaceHolder.Callback {
+                    override fun surfaceCreated(h: android.view.SurfaceHolder) { vm.setWsSurface(h.surface) }
+                    override fun surfaceChanged(h: android.view.SurfaceHolder, f: Int, w: Int, ht: Int) { vm.setWsSurface(h.surface) }
+                    override fun surfaceDestroyed(h: android.view.SurfaceHolder) { vm.setWsSurface(null) }
+                })
+            }
+        } else {
+            SurfaceViewRenderer(this).apply {
+                init(vm.eglContext, null)
+                setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                // 交给硬件合成器缩放，比 GL 逐帧缩放更省电、延迟更低
+                setEnableHardwareScaler(true)
+                isFocusable = true
+                isFocusableInTouchMode = true
+                renderer = this
+            }
         }
         setupTouch()
 
         setContent {
             WebrtcPhoneTheme(ThemeMode.DARK) {
-                StreamScreen(vm, renderer, onScreenshot = ::screenshot, onExit = ::exit)
+                StreamScreen(vm, videoView, onScreenshot = ::screenshot, onExit = ::exit)
             }
         }
 
@@ -87,8 +102,17 @@ class StreamActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { vm.toasts.collect { Toast.makeText(this@StreamActivity, it, Toast.LENGTH_SHORT).show() } }
                 launch { vm.videoSize.collect { applyOrientation() } }
+                launch {
+                    // 传输方式切换：结束当前页并以新 transport 重开（渲染视图在 onCreate 固定，必须重建）
+                    vm.recreateEvent.collect {
+                        StreamLauncher.pending?.let { t ->
+                            finish()
+                            StreamLauncher.launch(this@StreamActivity, t)
+                        }
+                    }
+                }
                 launch { vm.settings.app.collect { applyOrientation(); applyKeepScreenOn(it.keepScreenOn) } }
-                launch { snapshotFlow { vm.mirrored }.collect { renderer.setMirror(it) } }
+                launch { snapshotFlow { vm.mirrored }.collect { renderer?.setMirror(it) } }
                 launch {
                     snapshotFlow { vm.keyboardMode }.collect { on ->
                         if (!on) {
@@ -104,7 +128,7 @@ class StreamActivity : ComponentActivity() {
 
     private fun setupTouch() {
         val forwarder = TouchForwarder(vm) {
-            if (vm.settings.app.value.haptics) renderer.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            if (vm.settings.app.value.haptics) videoView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         }
         // 摄像头模式：双指捏合 = 数字变焦（1x–8x）
         val scale = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -113,13 +137,13 @@ class StreamActivity : ComponentActivity() {
                 return true
             }
         })
-        renderer.setOnTouchListener { v, e ->
+        videoView.setOnTouchListener { v, e ->
             if (vm.target.isCamera) {
                 scale.onTouchEvent(e)
                 true
             } else forwarder.onTouch(v, e)
         }
-        renderer.setOnGenericMotionListener(forwarder)
+        videoView.setOnGenericMotionListener(forwarder)
     }
 
     private fun applyOrientation() {
@@ -152,6 +176,7 @@ class StreamActivity : ComponentActivity() {
 
     private fun onBack() {
         when {
+            vm.drawerOpen -> vm.closeDrawer()
             vm.panel != Panel.NONE -> vm.panel = Panel.NONE
             vm.keyboardMode -> vm.setKeyboard(false)
             vm.target.viewOnly || vm.target.isCamera || vm.phase.value !is com.webrtc_phone.android.rtc.ConnectionPhase.Connected -> {
@@ -168,7 +193,7 @@ class StreamActivity : ComponentActivity() {
     /** 物理键盘直通（外接键盘/蓝牙键盘），媒体音量键留给本机 */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
-        val passthrough = !vm.keyboardMode && vm.panel == Panel.NONE && !vm.target.viewOnly &&
+        val passthrough = !vm.keyboardMode && !vm.drawerOpen && vm.panel == Panel.NONE && !vm.target.viewOnly &&
             event.device?.isVirtual == false && code != KeyEvent.KEYCODE_BACK &&
             code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN &&
             event.isFromSource(android.view.InputDevice.SOURCE_KEYBOARD)
@@ -181,7 +206,7 @@ class StreamActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        vm.attach(renderer)
+        renderer?.let { vm.attach(it) }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -194,14 +219,14 @@ class StreamActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        vm.detach(renderer)
+        renderer?.let { vm.detach(it) }
         super.onStop()
     }
 
     override fun onDestroy() {
-        if (::renderer.isInitialized) {
-            vm.detach(renderer)
-            renderer.release()
+        renderer?.let {
+            vm.detach(it)
+            it.release()
         }
         super.onDestroy()
     }
@@ -214,7 +239,11 @@ class StreamActivity : ComponentActivity() {
     // ---------- 截图 ----------
 
     private fun screenshot() {
-        renderer.addFrameListener({ bmp ->
+        val r = renderer ?: run {
+            Toast.makeText(this, "WS 模式暂不支持截图", Toast.LENGTH_SHORT).show()
+            return
+        }
+        r.addFrameListener({ bmp ->
             val copy = bmp.copy(Bitmap.Config.ARGB_8888, false)
             lifecycleScope.launch {
                 val ok = withContext(Dispatchers.IO) { runCatching { saveImage(copy) }.getOrNull() }

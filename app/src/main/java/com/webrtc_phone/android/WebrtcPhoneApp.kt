@@ -11,6 +11,7 @@ import com.webrtc_phone.android.data.model.AuthSession
 import com.webrtc_phone.android.data.realtime.DashboardSocket
 import com.webrtc_phone.android.data.repo.DeviceRepository
 import com.webrtc_phone.android.data.repo.QuickTextRepository
+import com.webrtc_phone.android.data.repo.ServerFileRepository
 import com.webrtc_phone.android.data.settings.SettingsRepository
 import com.webrtc_phone.android.rtc.RtcEngine
 import com.webrtc_phone.android.rtc.SessionManager
@@ -32,7 +33,11 @@ class AppContainer(context: Context) {
 
     private var scoped: Pair<AuthSession, UserScope>? = null
 
-    class UserScope(val devices: DeviceRepository, val quickTexts: QuickTextRepository)
+    class UserScope(
+        val devices: DeviceRepository,
+        val quickTexts: QuickTextRepository,
+        val serverFiles: ServerFileRepository,
+    )
 
     /** 当前登录会话的仓库；未登录返回 null */
     @Synchronized
@@ -52,7 +57,11 @@ class AppContainer(context: Context) {
             tokenProvider = { sessions.session.value?.token },
             onUnauthorized = { sessions.expire("登录已过期，请重新登录") },
         )
-        val scope = UserScope(DeviceRepository(s, api, socket), QuickTextRepository(api))
+        val scope = UserScope(
+            DeviceRepository(s, api, socket),
+            QuickTextRepository(api),
+            ServerFileRepository(appContext, api, endpoint),
+        )
         scoped = s to scope
         return scope
     }

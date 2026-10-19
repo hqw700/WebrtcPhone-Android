@@ -11,6 +11,7 @@ import com.webrtc_phone.android.data.model.AuthSession
 import com.webrtc_phone.android.data.model.Device
 import com.webrtc_phone.android.data.model.Me
 import com.webrtc_phone.android.data.model.Tag
+import com.webrtc_phone.android.data.model.TagOps
 import com.webrtc_phone.android.data.model.TagsPayload
 import com.webrtc_phone.android.data.realtime.DashboardEvent
 import com.webrtc_phone.android.data.realtime.DashboardSocket
@@ -27,6 +28,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -59,6 +62,16 @@ class DeviceRepository(
 
     private val _tags = MutableStateFlow(TagsPayload.EMPTY)
     val tags: StateFlow<TagsPayload> = _tags.asStateFlow()
+
+    // 标签写操作串行化：所有改标签的方法都在锁内「读最新 _tags → 改 → POST」，
+    // 否则两个并发写（如重命名标签与给设备分配标签）会各自基于旧快照构建整份 payload，
+    // 服务端 admin 路径是整体覆盖，后写的会把先写的改动抹掉（丢更新）。
+    private val tagWriteMutex = Mutex()
+
+    // 保存在途计数：>0 时忽略服务端 tags_update 广播与 loadMeta 拉取，
+    // 避免「本地刚保存的最新值」被一条稍慢到达的旧广播/旧 GET 回退覆盖。
+    @Volatile
+    private var tagSaveInFlight = 0
 
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
@@ -117,7 +130,8 @@ class DeviceRepository(
     suspend fun loadMeta() {
         runCatching { api.me() }.onSuccess { _me.value = it }
         if (session.isAdmin) {
-            runCatching { api.tags() }.onSuccess { _tags.value = it }
+            // 保存在途时不要用 GET 结果覆盖：此刻服务端可能还没落盘/广播完本地最新改动
+            runCatching { api.tags() }.onSuccess { if (tagSaveInFlight == 0) _tags.value = it }
         }
     }
 
@@ -148,7 +162,7 @@ class DeviceRepository(
                     scope.launch { fetchSnapshot(e.deviceId) }
                 }
             }
-            is DashboardEvent.Tags -> _tags.value = e.payload
+            is DashboardEvent.Tags -> if (tagSaveInFlight == 0) _tags.value = e.payload
             is DashboardEvent.ScreenState -> _devices.update { list ->
                 list.map { if (it.id == e.deviceId) it.copy(screenState = e.state) else it }
             }
@@ -206,38 +220,38 @@ class DeviceRepository(
     }
 
     suspend fun saveTags(payload: TagsPayload) {
-        val old = _tags.value
-        _tags.value = payload
-        try {
-            api.saveTags(payload)
-        } catch (e: ApiException) {
-            _tags.value = old
-            throw e
+        mutateTags { payload }
+    }
+
+    suspend fun upsertTag(tag: Tag) = mutateTags { TagOps.upsert(it, tag) }
+
+    suspend fun deleteTag(tagId: String) = mutateTags { TagOps.delete(it, tagId) }
+
+    suspend fun setDeviceTags(deviceId: String, tagIds: List<String>) =
+        mutateTags { TagOps.setDeviceTags(it, deviceId, tagIds) }
+
+    /**
+     * 标签写操作的统一入口：串行执行，锁内基于「最新」_tags 计算新值，
+     * 乐观更新后 POST，失败回滚。保存在途期间屏蔽服务端广播/GET 回退（见 tagSaveInFlight）。
+     *
+     * 为什么要锁内取 _tags：两个并发写若各自在锁外拿旧快照，服务端整体覆盖会丢其中一个改动。
+     */
+    private suspend fun mutateTags(transform: (TagsPayload) -> TagsPayload) {
+        tagWriteMutex.withLock {
+            val old = _tags.value
+            val next = transform(old)
+            if (next == old) return
+            tagSaveInFlight++
+            _tags.value = next
+            try {
+                api.saveTags(next)
+            } catch (e: ApiException) {
+                _tags.value = old
+                throw e
+            } finally {
+                tagSaveInFlight--
+            }
         }
-    }
-
-    suspend fun upsertTag(tag: Tag) {
-        val p = _tags.value
-        val exists = p.tags.any { it.id == tag.id }
-        val tags = if (exists) p.tags.map { if (it.id == tag.id) tag else it } else p.tags + tag
-        saveTags(p.copy(tags = tags))
-    }
-
-    suspend fun deleteTag(tagId: String) {
-        val p = _tags.value
-        saveTags(
-            TagsPayload(
-                tags = p.tags.filterNot { it.id == tagId },
-                deviceTags = p.deviceTags.mapValues { (_, ids) -> ids - tagId }.filterValues { it.isNotEmpty() },
-            )
-        )
-    }
-
-    suspend fun setDeviceTags(deviceId: String, tagIds: List<String>) {
-        val p = _tags.value
-        val map = p.deviceTags.toMutableMap()
-        if (tagIds.isEmpty()) map.remove(deviceId) else map[deviceId] = tagIds
-        saveTags(p.copy(deviceTags = map))
     }
 
     companion object {

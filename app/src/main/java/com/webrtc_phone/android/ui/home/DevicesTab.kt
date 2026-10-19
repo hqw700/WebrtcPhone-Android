@@ -151,7 +151,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, columns: Int, on
         TextField(
             value = query,
             onValueChange = onQuery,
-            placeholder = { Text("搜索设备 ID / 型号") },
+            placeholder = { Text("搜索设备 ID / 型号 / 标签") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             singleLine = true,
             shape = RoundedCornerShape(50),
@@ -219,7 +219,14 @@ fun DeviceCard(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
-    val ratio = device.info.primaryDisplay?.let { it.width.toFloat() / it.height }?.coerceIn(0.4f, 2.2f) ?: (9f / 19.5f)
+    // 画面比例优先取当前快照的真实比例（虚机应用横屏时快照为横向，避免被压扁/裁切），
+    // 无快照时回退到设备屏幕比例。
+    val snapRatio = snapshot?.let { s ->
+        val w = s.bitmap.width.toFloat(); val h = s.bitmap.height.toFloat()
+        if (w > 0 && h > 0) (w / h) else null
+    }
+    val ratio = (snapRatio ?: device.info.primaryDisplay?.let { it.width.toFloat() / it.height } ?: (9f / 19.5f))
+        .coerceIn(0.4f, 2.5f)
     Card(
         modifier = modifier.fillMaxWidth().combinedClickable(
             onClick = onClick,
@@ -234,7 +241,8 @@ fun DeviceCard(
                 Image(
                     bitmap = remember(snapshot.version) { snapshot.bitmap.asImageBitmap() },
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    // 卡片比例已随快照，Fit 保证不裁切不变形
+                    contentScale = ContentScale.Fit,
                     colorFilter = if (!device.online || device.screenOff) ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) }) else null,
                     alpha = if (device.online) 1f else 0.45f,
                     modifier = Modifier.fillMaxSize(),
@@ -277,11 +285,21 @@ fun DeviceCard(
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f))))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                if (tags.isNotEmpty() && !compact) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        tags.take(3).forEach { Pill(it.name, parseTagColor(it.color), filled = true) }
+                if (tags.isNotEmpty()) {
+                    if (compact) {
+                        // 紧凑布局（3–4 列）空间不足以显示文字，用彩色圆点表示已打标签
+                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            tags.take(4).forEach {
+                                Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(parseTagColor(it.color)))
+                            }
+                        }
+                        Spacer(Modifier.height(3.dp))
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            tags.take(3).forEach { Pill(it.name, parseTagColor(it.color), filled = true) }
+                        }
+                        Spacer(Modifier.height(4.dp))
                     }
-                    Spacer(Modifier.height(4.dp))
                 }
                 Text(
                     device.id, color = Color.White,

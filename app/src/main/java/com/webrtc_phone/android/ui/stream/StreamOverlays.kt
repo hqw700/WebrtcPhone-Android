@@ -36,10 +36,10 @@ import org.webrtc.SurfaceViewRenderer
  * SurfaceView 不支持 scale 变换，只能通过改变自身尺寸实现缩放。
  */
 @Composable
-fun VideoArea(renderer: SurfaceViewRenderer, ratio: Float, zoom: Float, modifier: Modifier = Modifier) {
+fun VideoArea(videoView: android.view.View, ratio: Float, zoom: Float, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
         Layout(content = {
-            AndroidView(factory = { renderer }, modifier = Modifier)
+            AndroidView(factory = { videoView }, modifier = Modifier)
         }) { measurables, c ->
             val maxW = c.maxWidth
             val maxH = c.maxHeight

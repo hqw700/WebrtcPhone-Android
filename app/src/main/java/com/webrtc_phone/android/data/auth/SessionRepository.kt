@@ -126,15 +126,41 @@ class SessionRepository(
     }
 
     fun forgetServer(url: String) {
+        // 移除最近服务器时一并删除该账号保存的密码
+        recentServers().filter { it.url == url }.forEach { clearPassword(url, it.username) }
         val arr = JSONArray()
         recentServers().filter { it.url != url }
             .forEach { arr.put(JSONObject().put("url", it.url).put("username", it.username)) }
         prefs.edit().putString(KEY_RECENT, arr.toString()).apply()
     }
 
+    // ---------- 记住密码（Keystore 加密，按 服务器+用户名 隔离） ----------
+
+    fun savedPassword(url: String, username: String): String? =
+        if (username.isBlank()) null else secureStore.getString(passwordKey(url, username))
+
+    fun savePassword(url: String, username: String, password: String) {
+        if (username.isBlank() || password.isEmpty()) return
+        secureStore.putString(passwordKey(url, username), password)
+    }
+
+    fun clearPassword(url: String, username: String) {
+        secureStore.remove(passwordKey(url, username))
+    }
+
+    /** “记住密码”勾选状态（非敏感，普通 prefs） */
+    var rememberPassword: Boolean
+        get() = prefs.getBoolean(KEY_REMEMBER, true)
+        set(v) {
+            prefs.edit().putBoolean(KEY_REMEMBER, v).apply()
+        }
+
+    private fun passwordKey(url: String, username: String) = "pwd:$url|$username"
+
     companion object {
         private const val KEY_SESSION = "auth_session"
         private const val KEY_RECENT = "recent_servers"
+        private const val KEY_REMEMBER = "remember_password"
         private const val MAX_RECENT = 6
     }
 }

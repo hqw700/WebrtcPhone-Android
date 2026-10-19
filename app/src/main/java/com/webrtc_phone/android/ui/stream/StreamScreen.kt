@@ -20,18 +20,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -53,7 +57,7 @@ import org.webrtc.SurfaceViewRenderer
 @Composable
 fun StreamScreen(
     vm: StreamViewModel,
-    renderer: SurfaceViewRenderer,
+    videoView: android.view.View,
     onScreenshot: () -> Unit,
     onExit: () -> Unit,
 ) {
@@ -81,10 +85,28 @@ fun StreamScreen(
         terminal?.output?.collect { v.write(it) }
     }
 
+    // 侧边栏：只允许按钮/长按悬浮球打开；关闭时禁用手势，避免边缘滑动抢走云手机的返回手势
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    LaunchedEffect(vm.drawerOpen) {
+        if (vm.drawerOpen) drawerState.open() else drawerState.close()
+    }
+    // 用户滑动/点遮罩关闭后，同步回 ViewModel（停止定时刷新）
+    LaunchedEffect(drawerState) {
+        snapshotFlow { drawerState.currentValue }.collect { v ->
+            if (v == DrawerValue.Closed && vm.drawerOpen) vm.closeDrawer()
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = vm.drawerOpen,
+        drawerContent = { DeviceDrawer(vm) },
+        scrimColor = Color.Black.copy(alpha = 0.5f),
+    ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        val showNav = app.showNavBar && !t.isCamera && !t.viewOnly
+        val showNav = app.showNavBar && !t.isCamera && !t.viewOnly && !vm.fullscreen
         val body: @Composable (Modifier) -> Unit = { m ->
-            VideoArea(renderer, ratio, if (t.isCamera) vm.cameraZoom else 1f, m)
+            VideoArea(videoView, ratio, if (t.isCamera) vm.cameraZoom else 1f, m)
         }
         // 不含 IME insets：弹出键盘时画面保持不动，只有输入条/终端随键盘上移
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
@@ -119,7 +141,16 @@ fun StreamScreen(
                 }
             }
             if (vm.keyboardMode) KeyboardBar(vm, Modifier.align(Alignment.BottomCenter).imePadding())
-            if (!t.isCamera && vm.panel != Panel.TERMINAL && !vm.keyboardMode) FloatingBall { vm.panel = Panel.TOOLS }
+            // 常驻左侧把手：一眼可见的“切换设备”入口（全屏模式下隐藏）
+            if (vm.canSwitchDevices && !vm.keyboardMode && vm.panel != Panel.TERMINAL && !vm.drawerOpen && !vm.fullscreen) {
+                DrawerHandle(onClick = vm::openDrawer, modifier = Modifier.align(Alignment.CenterStart))
+            }
+            if (!t.isCamera && vm.panel != Panel.TERMINAL && !vm.keyboardMode) {
+                FloatingBall(
+                    onClick = { vm.panel = Panel.TOOLS },
+                    onLongClick = if (vm.canSwitchDevices) ({ vm.openDrawer() }) else null,
+                )
+            }
         }
 
         when (val p = phase) {
@@ -128,6 +159,7 @@ fun StreamScreen(
             else -> if (!firstFrame) ConnectingOverlay(p, retry, t.deviceName, onExit)
         }
     }
+    }
 
     // 底部面板
     val sheetPanel = vm.panel.takeIf { it != Panel.NONE && it != Panel.TERMINAL }
@@ -135,7 +167,7 @@ fun StreamScreen(
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = sheetPanel == Panel.FILES)
         ModalBottomSheet(onDismissRequest = { vm.panel = Panel.NONE }, sheetState = state) {
             when (sheetPanel) {
-                Panel.TOOLS -> ToolGrid(toolSections(vm, connected, onScreenshot, onExit))
+                Panel.TOOLS -> ToolGrid(vm, toolSections(vm, connected, onScreenshot, onExit))
                 Panel.TEXT -> TextSendPanel(vm)
                 Panel.FILES -> Box(Modifier.fillMaxHeight(0.85f)) { FilePanel(files, vm) { vm.panel = Panel.NONE } }
                 Panel.QUALITY -> QualityPanel(vm) { vm.panel = Panel.NONE }
