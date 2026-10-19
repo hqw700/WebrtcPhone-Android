@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">WebRTC 云手机</string>
+    <string name="app_name">穿云投屏</string>
+    <!-- 主页标题（与应用名一致，可独立调整） -->
+    <string name="app_title">穿云投屏</string>
 </resources>

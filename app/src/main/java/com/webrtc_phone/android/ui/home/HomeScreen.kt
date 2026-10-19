@@ -91,7 +91,7 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
                         when (tabs.getOrNull(tab)?.key) {
                             "manage" -> "管理中心"
                             "me" -> "我的"
-                            else -> "我的云手机"
+                            else -> androidx.compose.ui.res.stringResource(com.webrtc_phone.android.R.string.app_title)
                         }
                     )
                 },

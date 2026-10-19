@@ -77,7 +77,7 @@ fun LoginScreen(vm: LoginViewModel) {
             Spacer(Modifier.height(48.dp))
             Image(painterResource(R.drawable.ic_app_logo), null, Modifier.size(80.dp))
             Spacer(Modifier.height(12.dp))
-            Text("WebRTC 云手机", style = MaterialTheme.typography.headlineSmall)
+            Text(androidx.compose.ui.res.stringResource(R.string.app_title), style = MaterialTheme.typography.headlineSmall)
             Text(
                 "低延迟 · 随时随地控制你的云端设备",
                 style = MaterialTheme.typography.bodyMedium,
