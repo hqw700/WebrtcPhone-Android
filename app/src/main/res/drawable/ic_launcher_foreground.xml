@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  穿云投屏 Logo 前景（矢量，置于自适应图标安全区内）：
+  - 白色云朵 = “穿云”；
+  - 云中投射出的播放/投屏三角 + 两段同心信号弧 = “投屏 / 穿透”。
+  简洁现代，单色白，靠品牌蓝底衬托。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 云朵（圆润融合的外形），略带阴影分层用整体白 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M42,40
+            C42,33 47.5,27.5 54.5,27.5
+            C60.2,27.5 65,31.3 66.6,36.5
+            C67.6,36.2 68.7,36 70,36
+            C76,36 80.9,40.9 80.9,47
+            C80.9,47.5 80.8,48 80.8,48.5
+            C84.7,49.9 87.5,53.6 87.5,58
+            C87.5,63.5 83,68 77.5,68
+            L36,68
+            C29.6,68 24.5,62.9 24.5,56.5
+            C24.5,50.3 29.4,45.2 35.5,45
+            C35.9,42.1 38.6,40 42,40 Z" />
+
+    <!-- 投屏/播放三角（从云中投射），用品牌蓝镂空出层次 -->
+    <path
+        android:fillColor="#FF2F6BF0"
+        android:pathData="M49,49
+            L65,57
+            L49,65 Z" />
+
+    <!-- 投射信号弧（两段同心），白色 -->
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69,76
+            C74.5,76 79,80.5 79,86" />
+    <path
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69,69
+            C78.4,69 86,76.6 86,86" />
+    <!-- 信号源点 -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M69,83 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+</vector>
