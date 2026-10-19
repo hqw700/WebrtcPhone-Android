@@ -1,19 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 品牌渐变背景（自适应图标会做圆角/圆形裁切） -->
+<!-- 透明背景：去掉原来的黑色方框，图标只保留霓虹手机图形 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M0,0h108v108h-108z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="0" android:startY="0"
-                android:endX="108" android:endY="108">
-                <item android:offset="0" android:color="#FF4F8BFF" />
-                <item android:offset="1" android:color="#FF2355E6" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M0,0h108v108h-108z"/>
 </vector>
