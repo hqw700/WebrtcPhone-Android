@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 深色圆角底板（径向深蓝紫渐变），自适应图标会按启动器形状裁切圆角。让霓虹图形在浅色启动器上也醒目。 -->
+<!-- 彩色圆角底板：青蓝→紫渐变（呼应霓虹配色），自适应图标按启动器形状裁切。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
@@ -9,11 +9,12 @@
     <path android:pathData="M0,0h108v108h-108z">
         <aapt:attr name="android:fillColor">
             <gradient
-                android:type="radial"
-                android:centerX="54" android:centerY="48"
-                android:gradientRadius="78">
-                <item android:offset="0" android:color="#FF1C2140" />
-                <item android:offset="1" android:color="#FF0C0E1C" />
+                android:type="linear"
+                android:startX="6" android:startY="0"
+                android:endX="102" android:endY="108">
+                <item android:offset="0" android:color="#FF2CC8FF" />
+                <item android:offset="0.5" android:color="#FF5B8BFF" />
+                <item android:offset="1" android:color="#FF9A5BFF" />
             </gradient>
         </aapt:attr>
     </path>
