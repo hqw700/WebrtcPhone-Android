@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  穿云投屏 Logo（矢量重绘自原霓虹图标）：
-  霓虹风手机轮廓（青→紫渐变），屏幕内云朵 + 投屏信号波。去掉原黑色方框（背景透明）。
-  双层描边营造霓虹辉光：底层粗、半透明做 glow；上层细、实色做主线。
+  穿云投屏 Logo（矢量，放大填满画布）：霓虹手机轮廓（青→紫渐变）+ 屏幕内云朵 + 投屏信号波。
+  透明背景，无黑框。双层描边做霓虹辉光。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
@@ -11,33 +10,29 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- ========== 辉光底层（粗、半透明） ========== -->
-    <!-- 手机外框 glow -->
+    <!-- 辉光底层（粗、半透明） -->
     <path
-        android:strokeWidth="7"
+        android:strokeWidth="10"
         android:strokeAlpha="0.35"
         android:fillColor="#00000000"
-        android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M42,30 L66,30 A6,6 0 0 1 72,36 L72,72 A6,6 0 0 1 66,78 L42,78 A6,6 0 0 1 36,72 L36,36 A6,6 0 0 1 42,30 Z">
+        android:pathData="M34,16 L74,16 A10,10 0 0 1 84,26 L84,82 A10,10 0 0 1 74,92 L34,92 A10,10 0 0 1 24,82 L24,26 A10,10 0 0 1 34,16 Z">
         <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="36" android:startY="30" android:endX="72" android:endY="78">
+            <gradient android:type="linear" android:startX="24" android:startY="16" android:endX="84" android:endY="92">
                 <item android:offset="0" android:color="#FF2BE6FF" />
                 <item android:offset="1" android:color="#FFB24BFF" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- ========== 主线上层（细、实色） ========== -->
-    <!-- 手机外框 -->
+    <!-- 手机外框主线 -->
     <path
-        android:strokeWidth="3"
+        android:strokeWidth="4.5"
         android:fillColor="#00000000"
-        android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M42,30 L66,30 A6,6 0 0 1 72,36 L72,72 A6,6 0 0 1 66,78 L42,78 A6,6 0 0 1 36,72 L36,36 A6,6 0 0 1 42,30 Z">
+        android:pathData="M34,16 L74,16 A10,10 0 0 1 84,26 L84,82 A10,10 0 0 1 74,92 L34,92 A10,10 0 0 1 24,82 L24,26 A10,10 0 0 1 34,16 Z">
         <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear" android:startX="36" android:startY="30" android:endX="72" android:endY="78">
+            <gradient android:type="linear" android:startX="24" android:startY="16" android:endX="84" android:endY="92">
                 <item android:offset="0" android:color="#FF4DEBFF" />
                 <item android:offset="1" android:color="#FFC06BFF" />
             </gradient>
@@ -45,29 +40,29 @@
     </path>
 
     <!-- 听筒 -->
-    <path android:strokeColor="#FF54ECFF" android:strokeWidth="2.6" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M50,34.5 L58,34.5" />
-    <!-- 底部 Home 指示条 -->
-    <path android:strokeColor="#FFBE6CFF" android:strokeWidth="2.6" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M50,73.5 L58,73.5" />
+    <path android:strokeColor="#FF54ECFF" android:strokeWidth="4" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M47,23.5 L61,23.5" />
+    <!-- Home 指示条 -->
+    <path android:strokeColor="#FFBE6CFF" android:strokeWidth="4" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M47,84.5 L61,84.5" />
 
-    <!-- 屏幕内：云朵 -->
+    <!-- 屏幕内：云朵（放大居中偏下） -->
     <path
-        android:strokeWidth="2.6"
+        android:strokeWidth="4"
         android:strokeColor="#FF8CD9FF"
         android:fillColor="#00000000"
         android:strokeLineJoin="round"
-        android:pathData="M47,62
-            A4.2,4.2 0 0 1 47.4,53.7
-            A5.2,5.2 0 0 1 57.2,52.4
-            A3.6,3.6 0 0 1 61.5,56
-            A3.3,3.3 0 0 1 61,62 Z" />
+        android:pathData="M41,66
+            A6.5,6.5 0 0 1 41.6,53.2
+            A8,8 0 0 1 56.8,51.2
+            A5.6,5.6 0 0 1 63.4,56.8
+            A5.1,5.1 0 0 1 62.6,66 Z" />
 
-    <!-- 屏幕内：投屏信号波（三段同心弧 + 源点），右上角 -->
-    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="2.4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M56.5,49.5 A4.5,4.5 0 0 1 61,54" />
-    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="2.4" android:strokeLineCap="round"
-        android:fillColor="#00000000" android:pathData="M56.5,45.5 A8.5,8.5 0 0 1 65,54" />
+    <!-- 屏幕内：投屏信号波（两段同心弧 + 源点），右上 -->
+    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="3.6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M55,46.5 A7,7 0 0 1 62,53.5" />
+    <path android:strokeColor="#FF8CD9FF" android:strokeWidth="3.6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M55,40 A13.5,13.5 0 0 1 68.5,53.5" />
     <path android:fillColor="#FF8CD9FF"
-        android:pathData="M55.2,54 m-1.6,0 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0" />
+        android:pathData="M53,53.5 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
 </vector>
