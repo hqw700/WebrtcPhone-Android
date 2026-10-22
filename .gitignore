@@ -1,11 +1,38 @@
+# Gradle and build
 *.iml
-.gradle
-local.properties
-/.idea
-.DS_Store
+.gradle/
+build/
 /build
 /app/build
-/captures
-.externalNativeBuild
-.cxx
+out/
+
+# Local & sensitive credentials
+local.properties
+*.keystore
+*.jks
+*.p12
+
+# IDE & editors
+.idea/
+*.iws
+*.ipr
+*.swp
+*~
+.vscode/
+
+# OS specific
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# Android & NDK specific
+captures/
+.externalNativeBuild/
+.cxx/
+*.hprof
+*.apk
+*.aab
+
+# Kotlin
 .kotlin/
+

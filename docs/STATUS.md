@@ -7,8 +7,8 @@
 从 `app/WebrtcTest`（旧版 ScrcpyOverWebRTC 客户端，包名 `com.buutuu.webrtctest`）重写为独立项目：
 - 去掉被控端（Agent Host）模式、Shizuku、Bugly、内置 agent 二进制。
 - 新包名 `com.webrtc_phone.android`（`webrtc-phone` 中横线在包名中非法），debug 包后缀 `.debug`。
-- 独立仓库：<http://192.168.100.136:3000/huangqw/WebrtcPhone>，分支 `main`。
-- 外层 cloudphone 仓库中 `app/WebrtcPhone` 目前显示为未跟踪目录（待定：加 `.gitignore` 还是挂子模块）。
+- 仓库分支：`main`。
+- 外层 cloudphone 仓库中 `app/WebrtcPhone` 可作为独立仓库或子模块管理。
 
 ## Git 状态
 
@@ -27,9 +27,9 @@
   10b. WS 模式交互完善：`ui/stream/StreamScreen.kt`（顶部「WS 中转模式」蓝色 Banner 标识）；`ui/stream/StreamTools.kt`（WS 模式下 截图/发送剪贴板/获取剪贴板/文件/安装应用/终端/声音 置灰 enabled=false；「画面与连接」新增「切到 WebRTC / 切到 WS 模式」切换项，分享访客不显示）；`ui/stream/StreamViewModel.kt`（`switchTransport(to)` 关闭当前会话→改 target.transport→`recreateEvent`）；`ui/stream/StreamActivity.kt`（收 `recreateEvent` → finish + 重新 launch，换渲染视图）。真机验证：WS 徽标显示、禁用项置灰、切到 WebRTC 后 ICE CONNECTED + 局域网直连，往返切换正常。
 - `local.properties` 已含 release 签名配置（从 `app/WebrtcTest/local.properties` 复制），被 `.gitignore` 忽略，**不要提交**。
 
-## 已在真机验证（设备 28301FDH300F49，Android 15）
+## 已在真机验证（Android 15 真机设备）
 
-测试服务器：内网 `https://192.168.100.241:8443`（自签证书，指纹 `69:08:9D:…:19:B8`）；公网 `https://app.webrtc-phone.com:8899`（DigiCert）。账号见用户提供，不写入仓库。
+测试服务器：内网私有部署服务器（自签证书）；公网部署服务器。账号见实际环境，不写入仓库。
 
 - 登录：自签证书 TOFU 确认、账号登录、重启后自动恢复登录、错误中文提示、退出登录
 - 公网服务器登录（ClientHello 拆包修复后）
@@ -41,7 +41,7 @@
 - 卡密访客（该入口现已从登录页移除）：密码提示、错误密码、仅观看拦截
 - release 包（R8 混淆）：登录、投屏、终端 JS 桥正常
 - 记住密码：加密写入 SecureStore（已确认文件中无明文）
-- **投屏中设备侧边栏**（2026-10-18 本会话验证，设备 28301FDH300F49）：左侧 `›` 把手打开侧边栏；当前设备置顶高亮“当前设备”、在线（空闲）、离线（灰显）排序正确；点在线设备 `switchDevice` 重建会话（cp-210 488×1080 → redroid-0f2e 608×1080，ICE 重新 CHECKING→CONNECTED，画面确为新设备）；返回键先关侧边栏不退出投屏。compileDebugKotlin / testDebugUnitTest / assembleRelease(R8) 均通过。
+- **投屏中设备侧边栏**（真机设备验证）：左侧 `›` 把手打开侧边栏；当前设备置顶高亮“当前设备”、在线（空闲）、离线（灰显）排序正确；点在线设备 `switchDevice` 重建会话（ICE 重新 CHECKING→CONNECTED，画面确为新设备）；返回键先关侧边栏不退出投屏。compileDebugKotlin / testDebugUnitTest / assembleRelease(R8) 均通过。
 - **标签管理完善**（2026-10-18 本会话验证，admin）：重名拦截（输入已存在 `pve` → 红色错误「已存在同名标签」+ 保存禁用）；唯一名恢复可保存；新建「test-tag」入列 + snackbar「已保存」；删除确认 → 复原两项 + 「已删除」；logcat 无 crash。底层修复：`TagOps` 纯函数 + `tagWriteMutex` 串行化 + `tagSaveInFlight` 屏蔽在途广播/GET 回退（消除并发丢更新）。
 
 ## 未完成 / 未验证
@@ -54,7 +54,6 @@
 - 剪贴板双向同步
 - 用户新建 / 编辑有效期与权限 / 删除 / 踢下线
 - 退出登录后再进登录页，密码是否自动填回
-- **摄像头监控**：rk3588-aio（redroid）摄像头 HAL 报 `CameraAccessException: camera device is in the error state`，属设备问题。用户已有带真实摄像头的设备，待测。
 
 ### 已知问题 / 限制
 - **agent `hard_keyboard`**：开启后视频停止（0 fps，需重连）。App 已不再发送该命令，代价是云手机软键盘可能弹出遮挡画面。根治需修 agent。

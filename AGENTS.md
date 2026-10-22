@@ -4,7 +4,7 @@
 
 ## 环境与构建
 
-- JDK 17+（本机为 21），Android SDK 在 `local.properties` 的 `sdk.dir`（本机 `/Volumes/m2/sdk`）。
+- JDK 17+，Android SDK 在 `local.properties` 的 `sdk.dir` 或环境变量 `$ANDROID_HOME`。
 - AGP 8.8 / Kotlin 2.0.21 / Compose BOM 2024.12.01 / compileSdk 35 / minSdk 24。依赖版本统一在 `gradle/libs.versions.toml`。
 
 ```bash
@@ -20,7 +20,8 @@
 
 ## 真机调试
 
-- 设备：`adb devices`（常用 28301FDH300F49，1080×2340，截图坐标 × 1.4917 = 物理坐标）。
+- 设备：`adb devices` 查看当前连接的真机。
+- 坐标换算：部分设备截屏尺寸与物理触摸尺寸不同，若截图坐标与物理坐标存在缩放比例，注意根据逻辑分辨率适配。
 - 屏幕易锁：先 `adb shell input keyevent 224` + 上滑解锁。
 - `adb shell input text` 不支持 `;`、引号；空格用 `%s`。`keyevent 111`（ESC）会被输入框当字符吃掉，收键盘用 `keyevent 4`。
 - 日志：`adb logcat -d | grep -E "RtcSession|SessionManager|Terminal|AndroidRuntime"`，崩溃 `adb logcat -d -b crash`。
