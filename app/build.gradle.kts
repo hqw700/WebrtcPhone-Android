@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.io.ByteArrayOutputStream
 
 plugins {
     alias(libs.plugins.android.application)
@@ -20,17 +21,44 @@ val baseVersionName: String = run {
     "1.0.0"
 }
 
-// WebrtcPhone 本地打包号：每次打包在 build.number 里递增，versionName 形如 0.4.2-1。
-// 基础版本仍跟随 cloudphone VERSION，不在本仓库复制。build.number 缺省 0（无后缀）。
-val buildNumber: Int = rootProject.file("build.number")
-    .takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull() ?: 0
+// 执行 git 命令的辅助工具（带 fallback，避免离线源码构建报错）
+fun gitCommand(vararg args: String): String {
+    return try {
+        val stdout = ByteArrayOutputStream()
+        project.exec {
+            commandLine("git", *args)
+            standardOutput = stdout
+            errorOutput = ByteArrayOutputStream()
+            isIgnoreExitValue = true
+        }
+        stdout.toString().trim()
+    } catch (_: Exception) {
+        ""
+    }
+}
 
-val appVersionName: String = if (buildNumber > 0) "$baseVersionName-$buildNumber" else baseVersionName
+val gitCommitCount: Int = gitCommand("rev-list", "--count", "HEAD").toIntOrNull() ?: 12
+val gitCommitHash: String = gitCommand("rev-parse", "--short", "HEAD").ifEmpty { "unknown" }
+val isGitDirty: Boolean = gitCommand("status", "--porcelain").isNotEmpty()
+val gitExactTag: String = gitCommand("describe", "--tags", "--exact-match")
 
-// versionCode = 基础版本数字拼接 * 1000 + 打包号，保证每次打包单调递增
-val appVersionCode: Int = (baseVersionName.split(".")
-    .fold(0) { acc, part -> acc * 100 + (part.takeWhile { it.isDigit() }.toIntOrNull() ?: 0) } * 1000 + buildNumber)
-    .coerceAtLeast(1)
+// versionName：若在 Release Tag 上则为纯版本号，否则形如 0.4.2-75e0d39（脏工作区追加 -dirty）
+val appVersionName: String = if (gitExactTag.isNotEmpty()) {
+    baseVersionName
+} else {
+    val dirtySuffix = if (isGitDirty) "-dirty" else ""
+    "$baseVersionName-$gitCommitHash$dirtySuffix"
+}
+
+// versionCode = Major * 10,000,000 + Minor * 100,000 + Patch * 1,000 + gitCommitCount
+// 保证 32 位正整数内单调递增，永不溢出
+val appVersionCode: Int = run {
+    val parts = baseVersionName.split(".").map { it.takeWhile { c -> c.isDigit() }.toIntOrNull() ?: 0 }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    val patch = parts.getOrElse(2) { 0 }
+    (major * 10_000_000 + minor * 100_000 + patch * 1_000 + gitCommitCount).coerceAtLeast(1)
+}
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
