@@ -176,6 +176,22 @@ object Parsers {
         )
     }
 
+    fun adminLease(o: JSONObject) = AdminLease(
+        leaseId = o.optString("lease_id", o.optString("id")),
+        username = o.optString("username"),
+        deviceId = o.optString("device_id"),
+        createdAt = Rfc3339.parse(o.optStringOrNull("created_at")),
+        expiresAt = Rfc3339.parse(o.optStringOrNull("expires_at")),
+        remainingSeconds = o.optLong("remaining_seconds", -1),
+        active = o.optBoolean("active", false),
+        note = o.optString("note"),
+        createdBy = o.optString("created_by"),
+        revokedAt = Rfc3339.parse(o.optStringOrNull("revoked_at")),
+        policyOverride = o.optJSONObject("policy_override")?.let { policy(it) },
+    )
+
+    fun adminLeases(arr: JSONArray?): List<AdminLease> = arr.objects().map(::adminLease)
+
     /** /api/files 返回数组 [{name,size,updated_at,url,owner,uploaded_at}] */
     fun serverFiles(body: String): List<ServerFile> {
         val t = body.trim()

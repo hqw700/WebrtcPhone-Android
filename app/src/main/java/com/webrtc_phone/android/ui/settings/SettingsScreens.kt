@@ -1,5 +1,6 @@
 package com.webrtc_phone.android.ui.settings
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -9,6 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import com.webrtc_phone.android.R
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -268,7 +273,33 @@ fun AboutScreen(onBack: () -> Unit) {
         }.onFailure { android.widget.Toast.makeText(ctx, "无法打开链接", android.widget.Toast.LENGTH_SHORT).show() }
     }
     SubScreen("关于", onBack) { pad ->
-        Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())) {
+        Column(
+            Modifier
+                .padding(pad)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(20.dp))
+            Image(
+                painter = painterResource(R.drawable.ic_app_logo),
+                contentDescription = null,
+                modifier = Modifier.size(72.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.app_title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ScrcpyOverWebRTC",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+
             SectionCard {
                 SettingRow("版本", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
                 SettingRow("包名", BuildConfig.APPLICATION_ID)

@@ -374,3 +374,59 @@ class WsProtocolTest {
         assertEquals(10, o.getJSONObject("event").getInt("x"))
     }
 }
+
+class AdminLeaseAndUsersTest {
+    @Test fun parseAdminLease() {
+        val json = JSONObject("""{
+            "lease_id": "lease_abc123",
+            "username": "tester",
+            "device_id": "pixel_7",
+            "created_at": "2026-10-21T10:00:00Z",
+            "expires_at": "2026-10-22T10:00:00Z",
+            "remaining_seconds": 86400,
+            "active": true,
+            "note": "订单号 #8888",
+            "created_by": "admin"
+        }""")
+        val l = Parsers.adminLease(json)
+        assertEquals("lease_abc123", l.leaseId)
+        assertEquals("tester", l.username)
+        assertEquals("pixel_7", l.deviceId)
+        assertEquals(86400L, l.remainingSeconds)
+        assertTrue(l.active)
+        assertFalse(l.isPermanent)
+        assertFalse(l.isRevoked)
+        assertFalse(l.isExpiringSoon(thresholdSeconds = 3600)) // 86400 不在 1 小时内
+        assertTrue(l.isExpiringSoon(thresholdSeconds = 86400 * 2)) // 在 2 天内
+        assertEquals("订单号 #8888", l.note)
+    }
+
+    @Test fun usersUiStateDerivedProps() {
+        val dev1 = com.webrtc_phone.android.data.model.Device(id = "d1", online = true)
+        val dev2 = com.webrtc_phone.android.data.model.Device(id = "d2", online = true)
+        val dev3 = com.webrtc_phone.android.data.model.Device(id = "d3", online = false)
+
+        val u1 = com.webrtc_phone.android.data.model.AdminUser("user1", "user", "", true, listOf("d1"), null, com.webrtc_phone.android.data.model.UserPolicy())
+        val u2 = com.webrtc_phone.android.data.model.AdminUser("admin", "admin", "主管", true, emptyList(), null, com.webrtc_phone.android.data.model.UserPolicy())
+
+        val l1 = com.webrtc_phone.android.data.model.AdminLease("l1", "user1", "d1", null, null, 3600, true, "", "admin", null)
+        val l2 = com.webrtc_phone.android.data.model.AdminLease("l2", "user1", "d2", null, null, 0, false, "", "admin", 123L) // 已失效/收回
+
+        val st = com.webrtc_phone.android.ui.manage.UsersUiState(
+            users = listOf(u1, u2),
+            leases = listOf(l1, l2),
+            devices = listOf(dev1, dev2, dev3)
+        )
+
+        assertEquals(2, st.totalUsers)
+        assertEquals(2, st.onlineUsers)
+        assertEquals(1, st.adminUsers)
+        assertEquals(1, st.totalActiveLeases)
+
+        // d1 处于活跃租约，d2 租约已失效，所以 idleDevices 为 d2 和 d3
+        assertEquals(setOf("d1"), st.leasedDeviceIds)
+        assertEquals(listOf(dev2, dev3), st.idleDevices)
+        assertEquals(1, st.activeLeasesByUser["user1"]?.size)
+        assertEquals(2, st.allLeasesByUser["user1"]?.size)
+    }
+}

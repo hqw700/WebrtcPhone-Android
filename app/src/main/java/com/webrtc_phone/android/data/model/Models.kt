@@ -70,16 +70,16 @@ data class DeviceClient(
 
 data class Device(
     val id: String,
-    val info: DeviceInfo,
-    val online: Boolean,
-    val screenState: String,
-    val lastSeen: Long?,
-    val clientCount: Int,
-    val clients: List<DeviceClient>,
+    val info: DeviceInfo = DeviceInfo(),
+    val online: Boolean = false,
+    val screenState: String = "",
+    val lastSeen: Long? = null,
+    val clientCount: Int = 0,
+    val clients: List<DeviceClient> = emptyList(),
     /** 普通用户：自己对该设备的租约剩余秒数；null = 无租约限制 */
-    val myLeaseRemainingSeconds: Long?,
+    val myLeaseRemainingSeconds: Long? = null,
     /** 管理员：当前活跃租约持有者 */
-    val leaseHolder: String?,
+    val leaseHolder: String? = null,
 ) {
     val displayName: String get() = id
     val inUse: Boolean get() = clientCount > 0
@@ -246,4 +246,33 @@ data class AdminUserCreate(
     val role: String,
     val note: String,
     val expireSeconds: Long,
+)
+
+/** 管理员视角租约全量数据（/api/admin/leases） */
+data class AdminLease(
+    val leaseId: String,
+    val username: String,
+    val deviceId: String,
+    val createdAt: Long?,
+    val expiresAt: Long?,
+    val remainingSeconds: Long, // -1 表示永久，>=0 剩余秒数
+    val active: Boolean,
+    val note: String,
+    val createdBy: String,
+    val revokedAt: Long?,
+    val policyOverride: UserPolicy? = null,
+) {
+    val isPermanent: Boolean get() = remainingSeconds == -1L || expiresAt == null
+    val isRevoked: Boolean get() = revokedAt != null
+    fun isExpiringSoon(thresholdSeconds: Long = 86400L * 3): Boolean =
+        active && !isPermanent && remainingSeconds in 0..thresholdSeconds
+}
+
+/** 开租请求 */
+data class LeaseCreateRequest(
+    val username: String,
+    val deviceId: String,
+    val durationSeconds: Long, // <= 0 表示永久
+    val note: String = "",
+    val policyOverride: UserPolicy? = null,
 )

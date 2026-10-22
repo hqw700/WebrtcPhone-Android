@@ -31,4 +31,24 @@ object Durations {
         DurationOption("90 天", 90 * DAY),
         DurationOption("365 天", 365 * DAY),
     )
+
+    val lease = listOf(
+        DurationOption("30 分钟", 1800L),
+        DurationOption("1 小时", HOUR),
+        DurationOption("2 小时", 2 * HOUR),
+        DurationOption("6 小时", 6 * HOUR),
+        DurationOption("1 天", DAY),
+        DurationOption("7 天", 7 * DAY),
+        DurationOption("30 天", 30 * DAY),
+        DurationOption("永久", 0),
+    )
+
+    val leaseExtend = listOf(
+        DurationOption("+30 分钟", 1800L),
+        DurationOption("+1 小时", HOUR),
+        DurationOption("+2 小时", 2 * HOUR),
+        DurationOption("+1 天", DAY),
+        DurationOption("+7 天", 7 * DAY),
+        DurationOption("+30 天", 30 * DAY),
+    )
 }

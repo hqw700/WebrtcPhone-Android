@@ -43,7 +43,25 @@ import com.webrtc_phone.android.rtc.CameraParams
 import com.webrtc_phone.android.ui.common.ConfirmDialog
 import com.webrtc_phone.android.ui.common.SettingRow
 import com.webrtc_phone.android.ui.common.StatusDot
+import com.webrtc_phone.android.ui.common.Pill
 import com.webrtc_phone.android.ui.theme.AppColors
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.font.FontWeight
+import com.webrtc_phone.android.data.model.AdminLease
+import com.webrtc_phone.android.data.model.AdminUser
+import com.webrtc_phone.android.ui.common.Durations
 
 /** 设备长按菜单 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +76,7 @@ fun DeviceActionSheet(
     onCamera: () -> Unit,
     onShare: () -> Unit,
     onTags: () -> Unit,
+    onLease: () -> Unit = {},
     onDelete: () -> Unit,
 ) {
     var info by remember { mutableStateOf(false) }
@@ -88,7 +107,16 @@ fun DeviceActionSheet(
                 onClick = { onDismiss(); onCamera() }
             )
             if (canShare) SettingRow("分享 / 生成卡密", icon = Icons.Outlined.Share, onClick = { onDismiss(); onShare() })
-            if (isAdmin) SettingRow("设置标签", icon = Icons.Outlined.Label, onClick = { onDismiss(); onTags() })
+            if (isAdmin) {
+                val leaseSub = if (device.leaseHolder != null) {
+                    val rem = device.myLeaseRemainingSeconds?.let { "，剩 " + Formatters.duration(it) } ?: ""
+                    "已租给 ${device.leaseHolder}$rem"
+                } else {
+                    "当前未出租，点击为用户开租"
+                }
+                SettingRow("设备开租 / 租约管理", leaseSub, icon = Icons.Outlined.Key, onClick = { onDismiss(); onLease() })
+                SettingRow("设置标签", icon = Icons.Outlined.Label, onClick = { onDismiss(); onTags() })
+            }
             SettingRow("设备信息", icon = Icons.Outlined.Info, onClick = { info = !info })
             if (info) DeviceInfoBlock(device)
             if (isAdmin && !device.online) {
@@ -102,6 +130,272 @@ fun DeviceActionSheet(
         confirmText = "删除", destructive = true,
         onConfirm = { onDismiss(); onDelete() }, onDismiss = { confirmDelete = false }
     )
+}
+
+/** 设备专属开租与租约管理 Sheet */
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun DeviceLeaseSheet(
+    device: Device,
+    onDismiss: () -> Unit,
+    fetchLease: suspend () -> AdminLease?,
+    fetchUsers: suspend () -> List<AdminUser>,
+    onCreateLease: (username: String, durationSeconds: Long, note: String) -> Unit,
+    onExtendLease: (leaseId: String, addedSeconds: Long) -> Unit,
+    onRevokeLease: (leaseId: String) -> Unit,
+) {
+    var loading by remember { mutableStateOf(true) }
+    var lease by remember { mutableStateOf<AdminLease?>(null) }
+    var users by remember { mutableStateOf<List<AdminUser>>(emptyList()) }
+
+    var selectedUsername by remember { mutableStateOf("") }
+    var selectedDuration by remember { mutableStateOf(Durations.lease[4]) }
+    var isCustomDuration by remember { mutableStateOf(false) }
+    var customDays by remember { mutableStateOf("1") }
+    var note by remember { mutableStateOf("") }
+    var showExtendDialog by remember { mutableStateOf(false) }
+    var showRevokeConfirm by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(device.id) {
+        loading = true
+        lease = fetchLease()
+        users = fetchUsers()
+        if (users.isNotEmpty()) selectedUsername = users.first().username
+        loading = false
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            Modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusDot(if (device.online) AppColors.Online else AppColors.Offline, size = 10)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("设备开租与租约管理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("设备 ID: ${device.id}" + (if (device.info.title.isNotBlank()) " (${device.info.title})" else ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            if (loading) {
+                Box(Modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+                    Text("正在加载租约与用户信息…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                val l = lease
+                if (l != null && l.active) {
+                    // 已有活跃租约
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("当前租户：", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(l.username, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.weight(1f))
+                                Pill(
+                                    if (l.isPermanent) "永久有效" else "剩余 ${Formatters.duration(l.remainingSeconds)}",
+                                    if (l.isExpiringSoon()) AppColors.Warning else AppColors.Online,
+                                    filled = true
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            if (l.note.isNotBlank()) {
+                                Text("备注：${l.note}", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(
+                                "开通时间：" + (l.createdAt?.let { Formatters.dateTime(it) } ?: "-"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            Spacer(Modifier.height(8.dp))
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                Button(
+                                    onClick = { showRevokeConfirm = true },
+                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = AppColors.Danger.copy(alpha = 0.15f), contentColor = AppColors.Danger),
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Text("提前收回")
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Button(
+                                    onClick = { showExtendDialog = true },
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Icon(Icons.Outlined.Update, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("租约展期")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // 设备未出租，提供开租表单
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text("为该设备开通租约", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
+
+                            Text("选择租户账号：", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            var userMenu by remember { mutableStateOf(false) }
+                            Box {
+                                androidx.compose.material3.OutlinedButton(
+                                    onClick = { userMenu = true },
+                                    shape = MaterialTheme.shapes.small,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(if (selectedUsername.isNotBlank()) selectedUsername else "请选择用户")
+                                        Text("▾")
+                                    }
+                                }
+                                DropdownMenu(expanded = userMenu, onDismissRequest = { userMenu = false }) {
+                                    users.forEach { u ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    StatusDot(if (u.online) AppColors.Online else AppColors.Offline, size = 8)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Text(u.username + if (u.note.isNotBlank()) " (${u.note})" else "")
+                                                }
+                                            },
+                                            onClick = {
+                                                selectedUsername = u.username
+                                                userMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+                            Text("租用时长：", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Durations.lease.forEach { opt ->
+                                    FilterChip(
+                                        selected = !isCustomDuration && selectedDuration == opt,
+                                        onClick = { isCustomDuration = false; selectedDuration = opt },
+                                        label = { Text(opt.label) },
+                                        shape = MaterialTheme.shapes.small
+                                    )
+                                }
+                                FilterChip(
+                                    selected = isCustomDuration,
+                                    onClick = { isCustomDuration = true },
+                                    label = { Text("自定义天数") },
+                                    shape = MaterialTheme.shapes.small
+                                )
+                            }
+                            if (isCustomDuration) {
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(
+                                    value = customDays,
+                                    onValueChange = { customDays = it.filter { ch -> ch.isDigit() } },
+                                    label = { Text("租用天数") },
+                                    singleLine = true,
+                                    shape = MaterialTheme.shapes.small,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it.take(80) },
+                                label = { Text("租约备注（如订单号 / 用途）") },
+                                singleLine = true,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(Modifier.height(14.dp))
+                            Button(
+                                enabled = selectedUsername.isNotBlank(),
+                                onClick = {
+                                    val durSec = if (isCustomDuration) (customDays.toLongOrNull() ?: 1L) * 86400L else selectedDuration.seconds
+                                    onCreateLease(selectedUsername, durSec, note.trim())
+                                    onDismiss()
+                                },
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("立即开租")
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+
+    if (showRevokeConfirm && lease != null) {
+        ConfirmDialog(
+            title = "收回设备租约",
+            message = "确定收回用户 ${lease!!.username} 对设备 ${device.id} 的租约？其连接将被立即切断。",
+            confirmText = "确认收回",
+            destructive = true,
+            onConfirm = {
+                showRevokeConfirm = false
+                onRevokeLease(lease!!.leaseId)
+                onDismiss()
+            },
+            onDismiss = { showRevokeConfirm = false }
+        )
+    }
+
+    if (showExtendDialog && lease != null) {
+        var extOption by remember { mutableStateOf(Durations.leaseExtend[3]) } // 默认 +1 天
+        AlertDialog(
+            onDismissRequest = { showExtendDialog = false },
+            title = { Text("租约展期") },
+            text = {
+                Column {
+                    Text("选择为设备 ${device.id} 延长的时间：", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Durations.leaseExtend.forEach { opt ->
+                            FilterChip(
+                                selected = extOption == opt,
+                                onClick = { extOption = opt },
+                                label = { Text(opt.label) },
+                                shape = MaterialTheme.shapes.small
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExtendDialog = false
+                        onExtendLease(lease!!.leaseId, extOption.seconds)
+                        onDismiss()
+                    }
+                ) { Text("确认") }
+            },
+            dismissButton = { TextButton(onClick = { showExtendDialog = false }) { Text("取消") } }
+        )
+    }
 }
 
 @Composable

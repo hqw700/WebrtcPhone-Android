@@ -66,6 +66,7 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
     var actionFor by remember { mutableStateOf<Device?>(null) }
     var cameraFor by remember { mutableStateOf<Device?>(null) }
     var tagsFor by remember { mutableStateOf<Device?>(null) }
+    var leaseFor by remember { mutableStateOf<Device?>(null) }
 
     // 页面可见时才保持实时连接/轮询；投屏期间 MainActivity 不可见，自动让出带宽
     LifecycleStartEffect(Unit) {
@@ -145,7 +146,19 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
             onCamera = { cameraFor = d },
             onShare = { navigate(Routes.shares(d.id, create = true)) },
             onTags = { tagsFor = d },
+            onLease = { leaseFor = d },
             onDelete = { vm.deleteDevice(d) },
+        )
+    }
+    leaseFor?.let { d ->
+        DeviceLeaseSheet(
+            device = d,
+            onDismiss = { leaseFor = null },
+            fetchLease = { vm.getDeviceLease(d.id) },
+            fetchUsers = { vm.getUsers() },
+            onCreateLease = { username, dur, note -> vm.createDeviceLease(username, d.id, dur, note) },
+            onExtendLease = { leaseId, dur -> vm.extendDeviceLease(leaseId, dur) },
+            onRevokeLease = { leaseId -> vm.revokeDeviceLease(leaseId) }
         )
     }
     cameraFor?.let { d ->

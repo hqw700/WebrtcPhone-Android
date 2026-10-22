@@ -111,6 +111,40 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
 
     fun setDeviceTags(deviceId: String, ids: List<String>) = launchOp("标签已更新") { repo.setDeviceTags(deviceId, ids) }
 
+    // ---------- 设备开租与租约管理快捷支持 ----------
+
+    suspend fun getDeviceLease(deviceId: String): com.webrtc_phone.android.data.model.AdminLease? {
+        val api = c.sessions.api() ?: return null
+        val leases = runCatching { api.adminLeases(device = deviceId, status = "active") }.getOrNull()
+        return leases?.firstOrNull()
+    }
+
+    suspend fun getUsers(): List<com.webrtc_phone.android.data.model.AdminUser> {
+        val api = c.sessions.api() ?: return emptyList()
+        return runCatching { api.users() }.getOrDefault(emptyList())
+    }
+
+    fun createDeviceLease(username: String, deviceId: String, durationSeconds: Long, note: String) =
+        launchOp("已为设备 $deviceId 开通租约") {
+            val api = c.sessions.api() ?: return@launchOp
+            api.createLease(com.webrtc_phone.android.data.model.LeaseCreateRequest(username, deviceId, durationSeconds, note))
+            repo.refresh()
+        }
+
+    fun extendDeviceLease(leaseId: String, durationSeconds: Long) =
+        launchOp("租约已展期") {
+            val api = c.sessions.api() ?: return@launchOp
+            api.extendLease(leaseId, durationSeconds)
+            repo.refresh()
+        }
+
+    fun revokeDeviceLease(leaseId: String) =
+        launchOp("租约已收回") {
+            val api = c.sessions.api() ?: return@launchOp
+            api.revokeLease(leaseId)
+            repo.refresh()
+        }
+
     fun logout() = viewModelScope.launch {
         c.streamSessions.close()
         repo.close()

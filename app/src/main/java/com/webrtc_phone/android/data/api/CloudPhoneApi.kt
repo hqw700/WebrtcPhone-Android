@@ -210,4 +210,59 @@ class CloudPhoneApi(val client: ApiClient) {
         }
         client.post("/api/admin/users/update", body)
     }
+
+    // ---------- 设备租约管理（admin） ----------
+
+    suspend fun adminLeases(user: String? = null, device: String? = null, status: String = "all"): List<com.webrtc_phone.android.data.model.AdminLease> {
+        val params = mutableListOf<String>()
+        if (!user.isNullOrBlank()) params.add("user=" + Uri.encode(user.trim()))
+        if (!device.isNullOrBlank()) params.add("device=" + Uri.encode(device.trim()))
+        params.add("status=" + Uri.encode(status.trim()))
+        val query = if (params.isNotEmpty()) "?" + params.joinToString("&") else ""
+        val text = client.get("/api/admin/leases$query").trim()
+        if (text.isEmpty() || text == "null") return emptyList()
+        return ApiClient.parse { Parsers.adminLeases(JSONArray(text)) }
+    }
+
+    suspend fun createLease(req: com.webrtc_phone.android.data.model.LeaseCreateRequest): com.webrtc_phone.android.data.model.AdminLease {
+        val body = JSONObject()
+            .put("username", req.username)
+            .put("device_id", req.deviceId)
+            .put("duration_seconds", req.durationSeconds)
+            .put("note", req.note)
+        if (req.policyOverride != null) {
+            val p = req.policyOverride
+            body.put(
+                "policy_override", JSONObject()
+                    .put("forbid_bitrate", p.forbidBitrate)
+                    .put("forbid_fps", p.forbidFps)
+                    .put("forbid_resolution", p.forbidResolution)
+                    .put("forbid_audio", p.forbidAudio)
+                    .put("forbid_file_push", p.forbidFilePush)
+                    .put("forbid_terminal", p.forbidTerminal)
+                    .put("forbid_share", p.forbidShare)
+            )
+        }
+        val text = client.post("/api/admin/leases/create", body)
+        return ApiClient.parse { Parsers.adminLease(JSONObject(text)) }
+    }
+
+    suspend fun extendLease(leaseId: String, durationSeconds: Long): com.webrtc_phone.android.data.model.AdminLease {
+        val body = JSONObject()
+            .put("lease_id", leaseId)
+            .put("duration_seconds", durationSeconds)
+        val text = client.post("/api/admin/leases/extend", body)
+        return ApiClient.parse { Parsers.adminLease(JSONObject(text)) }
+    }
+
+    suspend fun revokeLease(leaseId: String) {
+        val body = JSONObject().put("lease_id", leaseId)
+        client.post("/api/admin/leases/revoke", body)
+    }
+
+    suspend fun updateLeaseNote(leaseId: String, note: String): com.webrtc_phone.android.data.model.AdminLease {
+        val body = JSONObject().put("lease_id", leaseId).put("note", note)
+        val text = client.post("/api/admin/leases/update", body)
+        return ApiClient.parse { Parsers.adminLease(JSONObject(text)) }
+    }
 }
