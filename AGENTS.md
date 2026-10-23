@@ -30,6 +30,7 @@
 
 ## 代码约定
 
+- **Git 提交信息强制使用英文规范**：开源仓库所有 commit message 必须使用英文（遵循 Conventional Commits：`feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `chore: ...` 等），严禁提交中文 commit message。
 - 分层依赖只能 `ui → rtc / data → core`；新业务对象在 `AppContainer` 注册（进程级或 `userScope()` 会话级）。
 - Kotlin + Compose + StateFlow；ViewModel 用 `viewModel { ... }` 工厂手动构造，无 DI 框架。
 - 注释与界面文案用中文；注释写“为什么”，尤其是踩坑原因。
@@ -47,4 +48,5 @@
 - 不要往 PTY 发 init 以外的控制 JSON（agent 不支持 resize，会写进 shell）。
 - `ScrcpyOptions` 的 `video_source` 两种模式都要显式发送。
 - 不要提交 `local.properties`（含签名密码）和 `build/` 产物。提交前 `git status --short` 确认。
+- **不要使用中文 commit message**，开源仓库提交记录必须一律采用英文。
 - 推送到 `main` 前先征得用户同意。
