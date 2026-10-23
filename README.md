@@ -6,6 +6,8 @@
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.12.01-purple.svg)](https://developer.android.com/jetpack/compose)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+中文 | [English](README.en.md)
+
 **WebrtcPhone-Android (穿云投屏)** 是基于 WebRTC 与定制 `scrcpy-server` Agent 深度打造的现代化 Android 原生云手机与物理真机控制端客户端。
 
 本客户端是 [ScrcpyOverWebRTC (穿云投屏全平台体系)](https://github.com/hqw700/ScrcpyOverWebRTC) 的官方移动端主控应用。通过连接服务端的信令服务（Signaling Server），实现对远程 Android 物理真机（ARM64/x86）以及云手机容器（redroid / AOSP）的毫秒级低延迟超清投屏、精细化触控、文件双模管理、批量安装与租约运维。
