@@ -20,6 +20,48 @@
 
 ---
 
+## 📱 应用界面展示 (Screenshots)
+
+<p align="center">
+  <img src="docs/snapshot/1.png" width="31%" alt="设备矩阵大盘" />
+  <img src="docs/snapshot/2.png" width="31%" alt="超低延迟投屏直控" />
+  <img src="docs/snapshot/3.png" width="31%" alt="投屏中秒级切机抽屉" />
+</p>
+<p align="center">
+  <em>图 1: 设备矩阵大盘 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 2: 10ms 极低延迟投屏直控 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 3: 投屏中秒级切机抽屉</em>
+</p>
+
+<p align="center">
+  <img src="docs/snapshot/5.png" width="31%" alt="WebADB 交互式终端" />
+  <img src="docs/snapshot/6.png" width="31%" alt="双模文件管理器" />
+  <img src="docs/snapshot/8.png" width="31%" alt="用户管理与设备开租" />
+</p>
+<p align="center">
+  <em>图 4: WebADB 交互式终端 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 5: 双模文件管理器 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 6: 用户管理与设备开租</em>
+</p>
+
+<details>
+<summary><b>🔍 点击展开更多界面截图（登录认证 / 全功能控制面板 / 批量文件分发 / 管理中心 / 我的设置）</b></summary>
+<br>
+<p align="center">
+  <img src="docs/snapshot/10.png" width="31%" alt="登录认证" />
+  <img src="docs/snapshot/4.png" width="31%" alt="全功能控制面板" />
+  <img src="docs/snapshot/9.png" width="31%" alt="批量文件分发" />
+</p>
+<p align="center">
+  <em>图 7: 登录认证 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 8: 全功能控制面板 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 9: 批量文件分发向导</em>
+</p>
+<p align="center">
+  <img src="docs/snapshot/7.png" width="31%" alt="管理中心" />
+  <img src="docs/snapshot/0.png" width="31%" alt="个人设置与偏好" />
+</p>
+<p align="center">
+  <em>图 10: 管理中心主页 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 图 11: 个人设置与偏好</em>
+</p>
+</details>
+
+---
+
 ## ✨ 核心特性
 
 - **超清低延迟双通道传输**:
