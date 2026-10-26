@@ -162,11 +162,34 @@ fun CameraBar(
     Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.85f)).padding(vertical = 6.dp)) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             lenses.forEach { o ->
-                val sel = o.lens.id == p.cameraId && o.lens.facing == p.facing && o.lens.zoom == p.zoom
-                FilterChip(sel, { if (!sel) vm.switchCamera(p.copy(facing = o.lens.facing, cameraId = o.lens.id, zoom = o.lens.zoom)) }, { Text(o.label) }, colors = chip)
+                val sel = if (o.lens.facing != p.facing) false
+                    else if (o.lens.facing == "back") kotlin.math.abs(o.lens.zoom - p.zoom) < 0.15
+                    else o.lens.id == p.cameraId || p.cameraId.isBlank()
+                FilterChip(
+                    selected = sel,
+                    onClick = {
+                        if (!sel) {
+                            vm.toast("正在切换至 ${o.label}…")
+                            vm.switchCamera(p.copy(facing = o.lens.facing, cameraId = o.lens.id, zoom = o.lens.zoom))
+                        }
+                    },
+                    label = { Text(o.label) },
+                    colors = chip
+                )
             }
             CameraResolutions.forEach { (size, label) ->
-                FilterChip(p.size == size, { if (p.size != size) vm.switchCamera(p.copy(size = size)) }, { Text(label) }, colors = chip)
+                val selRes = p.size == size
+                FilterChip(
+                    selected = selRes,
+                    onClick = {
+                        if (!selRes) {
+                            vm.toast("正在切换分辨率至 $label…")
+                            vm.switchCamera(p.copy(size = size))
+                        }
+                    },
+                    label = { Text(label) },
+                    colors = chip
+                )
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
@@ -175,6 +198,7 @@ fun CameraBar(
             BarIcon(Icons.Filled.CameraAlt, "抓拍", big = true, onClick = onSnapshot)
             BarIcon(Icons.Filled.FlipCameraAndroid, "翻转") {
                 val front = p.facing == "front"
+                vm.toast(if (front) "正在切换至后置主摄…" else "正在切换至前置自拍…")
                 vm.switchCamera(p.copy(facing = if (front) "back" else "front", cameraId = if (front) "0" else "1", zoom = 1.0))
             }
             BarIcon(Icons.Filled.Close, "退出", onClick = onExit)

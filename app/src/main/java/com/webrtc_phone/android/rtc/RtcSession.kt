@@ -148,8 +148,16 @@ class RtcSession(
 
     // ---------- 生命周期 ----------
 
-    fun start() = executor.execute {
-        if (closed) return@execute
+    fun start(delayMs: Long = 0L) {
+        if (delayMs > 0) {
+            executor.schedule({ doStart() }, delayMs, TimeUnit.MILLISECONDS)
+        } else {
+            executor.execute { doStart() }
+        }
+    }
+
+    private fun doStart() {
+        if (closed) return
         _phase.value = ConnectionPhase.Signaling
         timeoutTask = executor.schedule({
             if (!closed && _phase.value != ConnectionPhase.Connected) {

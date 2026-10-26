@@ -442,7 +442,7 @@ fun lensOptions(d: Device): List<LensOption> {
     return listOf(
         LensOption("主摄 1x", CameraLens("0", "back", "main", "主摄", 1.0)),
         LensOption("广角 0.5x", CameraLens("0", "back", "ultra_wide", "广角", 0.5)),
-        LensOption("长焦 2x", CameraLens("0", "back", "telephoto", "长焦", 2.0)),
+        LensOption("长焦 5x", CameraLens("0", "back", "telephoto", "长焦", 5.0)),
         LensOption("前置", CameraLens("1", "front", "front", "前置", 1.0)),
     )
 }

@@ -34,7 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,10 +72,18 @@ fun StreamScreen(
     val stats by vm.stats.collectAsStateWithLifecycle()
     val files by vm.files.collectAsStateWithLifecycle()
     val terminal by vm.terminal.collectAsStateWithLifecycle()
+    val t = vm.target
     val session by vm.session.collectAsStateWithLifecycle()
     val deviceInfo by (session?.deviceInfo ?: kotlinx.coroutines.flow.MutableStateFlow<DeviceInfo?>(null)).collectAsStateWithLifecycle()
+    var lastKnownDeviceInfo by remember(t.deviceId) { mutableStateOf<DeviceInfo?>(null) }
+    LaunchedEffect(deviceInfo) {
+        val cur = deviceInfo
+        if (cur != null && cur.cameras.isNotEmpty()) {
+            lastKnownDeviceInfo = cur
+        }
+    }
+    val effectiveDeviceInfo = deviceInfo?.takeIf { it.cameras.isNotEmpty() } ?: lastKnownDeviceInfo ?: DeviceInfo()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val t = vm.target
     val ratio = size?.let { it.first.toFloat() / it.second } ?: (9f / 19.5f)
     val connected = phase == ConnectionPhase.Connected || phase == ConnectionPhase.Interrupted
 
@@ -115,11 +125,11 @@ fun StreamScreen(
                 if (showNav) NavKeys(vm, vertical = true)
             } else Column(Modifier.fillMaxSize()) {
                 body(Modifier.weight(1f).fillMaxWidth())
-                if (t.isCamera) CameraBar(vm, Device(t.deviceId, deviceInfo ?: DeviceInfo(), true, "", null, 0, emptyList(), null, null), onScreenshot, onExit)
+                if (t.isCamera) CameraBar(vm, Device(t.deviceId, effectiveDeviceInfo, true, "", null, 0, emptyList(), null, null), onScreenshot, onExit)
                 if (showNav) NavKeys(vm, vertical = false)
             }
             if (landscape && t.isCamera) Box(Modifier.align(Alignment.BottomCenter)) {
-                CameraBar(vm, Device(t.deviceId, deviceInfo ?: DeviceInfo(), true, "", null, 0, emptyList(), null, null), onScreenshot, onExit)
+                CameraBar(vm, Device(t.deviceId, effectiveDeviceInfo, true, "", null, 0, emptyList(), null, null), onScreenshot, onExit)
             }
 
             // 顶部提示

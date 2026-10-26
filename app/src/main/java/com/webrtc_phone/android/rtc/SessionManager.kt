@@ -100,12 +100,14 @@ class SessionManager(
 
     private fun replace(target: StreamTarget): RtcSession {
         watchJob?.cancel()
-        _session.value?.close()
+        val old = _session.value
         val s = RtcSession(context, engine, httpFactory, target, executor)
         renderer?.let { s.setRenderer(it) }
         s.setAudioEnabled(audioEnabled)
         _session.value = s
-        s.start()
+        old?.close()
+        val delayMs = if (old != null) 300L else 0L
+        s.start(delayMs)
         watchJob = scope.launch {
             s.phase.collect { p ->
                 when {
