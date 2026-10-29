@@ -1,5 +1,14 @@
 # WebrtcPhone 进度与待办
 
+## 2026-10-30 被控端修复
+
+- 已恢复外部信令的被控端模式，不内嵌信令服务端或 Web；仅 Root 模式提供开机自启动，Shizuku ADB 模式需每次重启后重新激活。
+- Shizuku 提供应用内授权入口；运行中锁定配置，停止时等待在途启动结束；以实际 Agent PID 判断启动结果。
+- 新安装默认设备 ID 使用持久化 UUID；Shell 配置参数使用单引号转义。
+- CI 执行 `bash scripts/fetch-agent-assets.sh`，每次构建查询上游最新正式 Release，下载 `cloudphone-<tag_name>.zip` 并按 GitHub 返回的 SHA-256 校验；查询/下载失败、缺少摘要或必需资源时直接失败。开发者也使用该脚本获取资源；显式传入 `-PsyncLocalAgentAssets=true` 才同步外层 `release/agentd`。二进制继续由 .gitignore 排除。
+- 下方为此前历史快照。
+
+
 最后更新：2026-10-18。用于换会话/换人接手。架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 背景

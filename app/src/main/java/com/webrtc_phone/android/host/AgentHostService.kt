@@ -21,6 +21,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 
 class AgentHostService : Service {
 
@@ -38,7 +40,12 @@ class AgentHostService : Service {
         var isServiceRunning: Boolean = false
             private set
 
+        @Volatile
+        var lastError: String? = null
+            private set
+
         fun start(context: Context) {
+            lastError = null
             val intent = Intent(context, AgentHostService::class.java).apply {
                 action = ACTION_START
             }
@@ -60,6 +67,8 @@ class AgentHostService : Service {
     private var wakeLock: PowerManager.WakeLock? = null
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var watchdogJob: Job? = null
+    private var runningPrefs: HostPreferences? = null
+    private var stopping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,7 +87,9 @@ class AgentHostService : Service {
             return START_NOT_STICKY
         }
 
+        if (isServiceRunning || stopping) return START_STICKY
         val prefs = HostConfig.load(this)
+        runningPrefs = prefs
         if (prefs.keepAlive) {
             acquireWakeLock()
         } else {
@@ -86,7 +97,7 @@ class AgentHostService : Service {
         }
 
         val notification = buildNotification("正在启动受控端...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
@@ -102,16 +113,16 @@ class AgentHostService : Service {
     }
 
     private fun startWatchdog(prefs: HostPreferences) {
-        watchdogJob?.cancel()
         watchdogJob = scope.launch {
             val useShizuku = prefs.runMode == RunMode.SHIZUKU
             while (isActive) {
-                val pid = AgentController.isAgentRunning(useShizuku)
-                if (pid.isNotEmpty()) {
-                    updateNotification("运行中 [PID: $pid] · 设备: ${prefs.deviceId.ifBlank { "默认" }}")
-                } else {
-                    updateNotification("Agent 未运行，尝试拉起中...")
-                    try {
+                try {
+                    val pid = AgentController.isAgentRunning(useShizuku)
+                    if (pid.isNotEmpty()) {
+                        lastError = null
+                        updateNotification("运行中 [PID: $pid] · 设备: ${prefs.deviceId}")
+                    } else {
+                        updateNotification("Agent 未运行，尝试拉起中...")
                         AgentController.startAgent(
                             applicationContext,
                             useShizuku,
@@ -119,9 +130,12 @@ class AgentHostService : Service {
                             prefs.deviceId,
                             prefs.iceServers
                         )
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Watchdog startAgent failed: ${e.message}")
                     }
+                } catch (e: Exception) {
+                    if (!isActive) throw e
+                    lastError = "启动失败: ${e.message}"
+                    updateNotification(lastError!!)
+                    Log.w(TAG, "Watchdog failed: ${e.message}")
                 }
                 delay(5000)
             }
@@ -208,26 +222,24 @@ class AgentHostService : Service {
     }
 
     private fun stopForegroundDaemon() {
-        watchdogJob?.cancel()
-        watchdogJob = null
-        releaseWakeLock()
-
-        val prefs = HostConfig.load(this)
-        AgentController.stopAgent(prefs.runMode == RunMode.SHIZUKU)
-
-        isServiceRunning = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        if (stopping) return
+        stopping = true
+        scope.launch {
+            // 等待当前部署/启动结束后再杀进程，避免停止后又被在途启动拉起。
+            watchdogJob?.cancelAndJoin()
+            AgentController.stopAgent((runningPrefs ?: HostConfig.load(this@AgentHostService)).runMode == RunMode.SHIZUKU)
+            isServiceRunning = false
+            lastError = null
+            releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
+            stopSelf()
         }
-        stopSelf()
-        Log.i(TAG, "AgentHostService stopped cleanly")
     }
 
     override fun onDestroy() {
+        isServiceRunning = false
+        scope.cancel()
+        releaseWakeLock()
         super.onDestroy()
-        stopForegroundDaemon()
     }
 }

@@ -3,6 +3,7 @@ package com.webrtc_phone.android.host
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import java.util.UUID
 
 enum class RunMode {
     ROOT,
@@ -37,15 +38,23 @@ object HostConfig {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     }
 
+    @Synchronized
     fun load(context: Context): HostPreferences {
         val sp = getPrefs(context)
-        val defaultId = defaultDeviceId()
+        val defaultId = sp.getString("installation_device_id", null) ?: defaultDeviceId().also { id ->
+            val editor = sp.edit().putString("installation_device_id", id)
+            // 迁移旧版自动生成的固件指纹 ID，保留用户自定义 ID。
+            val model = Build.MODEL.replace("\\s+".toRegex(), "_")
+            val oldDefault = "$model-${(Build.FINGERPRINT.hashCode() and 0xFFFF).toString(16).padStart(4, '0')}"
+            if (sp.getString(KEY_DEVICE_ID, null) == oldDefault) editor.putString(KEY_DEVICE_ID, id)
+            editor.commit()
+        }
         return HostPreferences(
             signalingUrl = sp.getString(KEY_SIGNALING, "") ?: "",
-            deviceId = sp.getString(KEY_DEVICE_ID, defaultId) ?: defaultId,
+            deviceId = sp.getString(KEY_DEVICE_ID, defaultId).orEmpty().ifBlank { defaultId },
             iceServers = sp.getString(KEY_ICE_SERVERS, "") ?: "",
             runMode = RunMode.fromString(sp.getString(KEY_RUN_MODE, "root")),
-            autoStart = sp.getBoolean(KEY_AUTO_START, false),
+            autoStart = RunMode.fromString(sp.getString(KEY_RUN_MODE, "root")) == RunMode.ROOT && sp.getBoolean(KEY_AUTO_START, false),
             keepAlive = sp.getBoolean(KEY_KEEP_ALIVE, true)
         )
     }
@@ -56,27 +65,17 @@ object HostConfig {
             .putString(KEY_DEVICE_ID, prefs.deviceId)
             .putString(KEY_ICE_SERVERS, prefs.iceServers)
             .putString(KEY_RUN_MODE, if (prefs.runMode == RunMode.SHIZUKU) "shizuku" else "root")
-            .putBoolean(KEY_AUTO_START, prefs.autoStart)
+            .putBoolean(KEY_AUTO_START, prefs.autoStart && prefs.runMode == RunMode.ROOT)
             .putBoolean(KEY_KEEP_ALIVE, prefs.keepAlive)
             .apply()
     }
 
     fun isAutoStartEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_AUTO_START, false)
+        return load(context).let { it.autoStart && it.runMode == RunMode.ROOT }
     }
 
     fun defaultDeviceId(): String {
         val model = Build.MODEL.replace("\\s+".toRegex(), "_")
-        val serial = try {
-            Build.getSerial()
-        } catch (_: Throwable) {
-            Build.UNKNOWN
-        }
-        val suffix = if (serial.isNotBlank() && serial != Build.UNKNOWN) {
-            serial.takeLast(6)
-        } else {
-            (Build.FINGERPRINT.hashCode() and 0xFFFF).toString(16).padStart(4, '0')
-        }
-        return "${model}-$suffix"
+        return "${model}-${UUID.randomUUID()}"
     }
 }

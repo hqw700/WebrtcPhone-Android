@@ -143,11 +143,11 @@ android {
     }
 }
 
-// 同步被控端二进制资产：优先从项目本地 release/agentd 同步，若不存在则保持现状（由 CI 或开发者手动放置）
+// 默认使用 scripts/fetch-agent-assets.sh 获取的最新正式版本；仅显式指定 -PsyncLocalAgentAssets=true 时使用本地开发组件。
 val syncAgentAssetsTask = tasks.register("syncAgentAssets") {
     val localAgentDir = File(rootProject.rootDir, "../../release/agentd")
     val assetsDir = file("src/main/assets")
-    inputs.dir(localAgentDir).optional()
+    inputs.files(fileTree(localAgentDir))
     outputs.dir(assetsDir)
     doLast {
         if (localAgentDir.isDirectory) {
@@ -164,7 +164,9 @@ val syncAgentAssetsTask = tasks.register("syncAgentAssets") {
     }
 }
 tasks.named("preBuild") {
-    dependsOn(syncAgentAssetsTask)
+    if (providers.gradleProperty("syncLocalAgentAssets").orNull == "true") {
+        dependsOn(syncAgentAssetsTask)
+    }
 }
 
 dependencies {

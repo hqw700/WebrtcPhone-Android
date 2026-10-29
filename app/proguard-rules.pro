@@ -2,6 +2,11 @@
 -keep class org.webrtc.** { *; }
 -dontwarn org.webrtc.**
 
+# Shizuku 的兼容进程入口由反射调用。
+-keepclassmembers class rikka.shizuku.Shizuku {
+    private static *** newProcess(java.lang.String[], java.lang.String[], java.lang.String);
+}
+
 # OkHttp
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.conscrypt.**

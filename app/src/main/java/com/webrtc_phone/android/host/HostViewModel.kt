@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -26,6 +26,7 @@ enum class HostStatus {
 data class HostUiState(
     val status: HostStatus = HostStatus.STOPPED,
     val agentPid: String = "",
+    val serviceRunning: Boolean = false,
     val hasAssets: Boolean = true,
     val rootStatus: AgentController.RootStatus = AgentController.RootStatus.NOT_AVAILABLE,
     val shizukuStatus: AgentController.ShizukuStatus = AgentController.ShizukuStatus.NOT_RUNNING,
@@ -72,13 +73,15 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         val useShizuku = _state.value.prefs.runMode == RunMode.SHIZUKU
         val pid = AgentController.isAgentRunning(useShizuku)
         val logs = AgentController.readLogsTail(useShizuku)
-        val root = AgentController.checkRootStatus()
+        val root = if (!useShizuku && AgentController.RootShell.isAlive()) {
+            AgentController.checkRootStatus()
+        } else _state.value.rootStatus
         val shizuku = AgentController.checkShizukuStatus()
         val hasAssets = AgentController.hasAssets(app)
 
         val newStatus = when {
             pid.isNotEmpty() -> HostStatus.RUNNING
-            _state.value.isBusy -> HostStatus.STARTING
+            AgentHostService.isServiceRunning || _state.value.isBusy -> HostStatus.STARTING
             else -> HostStatus.STOPPED
         }
 
@@ -86,6 +89,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 status = newStatus,
                 agentPid = pid,
+                serviceRunning = AgentHostService.isServiceRunning,
                 logs = logs,
                 rootStatus = root,
                 shizukuStatus = shizuku,
@@ -102,7 +106,9 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updatePrefs(transform: (HostPreferences) -> HostPreferences) {
-        val updated = transform(_state.value.prefs)
+        if (AgentHostService.isServiceRunning || _state.value.isBusy) return
+        val requested = transform(_state.value.prefs)
+        val updated = requested.copy(autoStart = requested.autoStart && requested.runMode == RunMode.ROOT)
         HostConfig.save(getApplication(), updated)
         _state.update { it.copy(prefs = updated) }
     }
@@ -115,6 +121,16 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
             else "wss://$url"
         } else url
         updatePrefs { it.copy(signalingUrl = normalized) }
+    }
+
+    fun requestShizukuPermission() {
+        try {
+            if (AgentController.checkShizukuStatus() == AgentController.ShizukuStatus.RUNNING_WAITING_PERMISSION) {
+                Shizuku.requestPermission(2001)
+            } else refreshState()
+        } catch (e: Exception) {
+            _state.update { it.copy(errorMessage = "请求 Shizuku 授权失败: ${e.message}") }
+        }
     }
 
     fun startHost() {
@@ -135,6 +151,10 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
 
+            if (currentPrefs.signalingUrl.isBlank()) {
+                _state.update { it.copy(isBusy = false, errorMessage = "请填写外部信令服务器地址") }
+                return@launch
+            }
             // 检查权限
             if (useShizuku) {
                 val shizukuStatus = AgentController.checkShizukuStatus()
@@ -152,6 +172,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } else {
                 val rootStatus = AgentController.checkRootStatus()
+                _state.update { it.copy(rootStatus = rootStatus) }
                 if (rootStatus != AgentController.RootStatus.GRANTED) {
                     _state.update {
                         it.copy(isBusy = false, errorMessage = "未获得 Root 权限。请在 Root 管理器（Magisk/KernelSU）中授予本应用超级用户权限。")
@@ -163,9 +184,21 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 // 开启前台服务并拉起守护
                 AgentHostService.start(app)
-                delay(1200)
-                pollInternal()
-                _state.update { it.copy(isBusy = false, toastMessage = "被控端已成功启动！") }
+                // 服务启动与 Agent 就绪是不同状态；只在观察到 PID 后报告进程启动。
+                var ready = false
+                repeat(15) {
+                    if (!ready) {
+                        delay(1000)
+                        pollInternal()
+                        ready = _state.value.agentPid.isNotEmpty()
+                    }
+                }
+                _state.update { it.copy(
+                    isBusy = false,
+                    toastMessage = if (ready) "被控端进程已启动" else null,
+                    errorMessage = if (ready) null else AgentHostService.lastError
+                        ?: "Agent 尚未启动，后台正在重试。请检查日志，或点击停止受控端。"
+                ) }
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
@@ -182,12 +215,20 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isBusy = true) }
             val app = getApplication<Application>()
-            AgentHostService.stop(app)
-            val useShizuku = _state.value.prefs.runMode == RunMode.SHIZUKU
-            AgentController.stopAgent(useShizuku)
-            delay(1000)
-            pollInternal()
-            _state.update { it.copy(isBusy = false, toastMessage = "被控端已停止") }
+            try {
+                if (AgentHostService.isServiceRunning) {
+                    AgentHostService.stop(app)
+                    repeat(15) { if (AgentHostService.isServiceRunning) delay(1000) }
+                    check(!AgentHostService.isServiceRunning) { "停止超时，请稍后重试" }
+                } else {
+                    AgentController.stopAgent(_state.value.prefs.runMode == RunMode.SHIZUKU)
+                }
+                pollInternal()
+                check(_state.value.agentPid.isEmpty()) { "Agent 进程仍在运行，请检查权限和日志" }
+                _state.update { it.copy(isBusy = false, status = HostStatus.STOPPED, toastMessage = "被控端已停止") }
+            } catch (e: Exception) {
+                _state.update { it.copy(isBusy = false, errorMessage = "停止失败: ${e.message}") }
+            }
         }
     }
 

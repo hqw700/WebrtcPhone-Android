@@ -164,7 +164,7 @@ fun HostScreen(
 
             // 核心控制按钮
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                val isRunning = state.status == HostStatus.RUNNING
+                val isRunning = state.status == HostStatus.RUNNING || state.serviceRunning
                 Button(
                     onClick = {
                         if (isRunning) vm.stopHost() else vm.startHost()
@@ -208,6 +208,7 @@ fun HostScreen(
                         onValueChange = { vm.updatePrefs { p -> p.copy(signalingUrl = it) } },
                         label = { Text("信令服务器地址 (ws:// 或 wss://)") },
                         leadingIcon = { Icon(Icons.Outlined.Dns, null) },
+                        enabled = !state.serviceRunning && !state.isBusy,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("例如 wss://192.168.1.100:8443") }
@@ -231,6 +232,7 @@ fun HostScreen(
                         onValueChange = { vm.updatePrefs { p -> p.copy(deviceId = it) } },
                         label = { Text("自定义设备 ID (空则使用系统默认)") },
                         leadingIcon = { Icon(Icons.Outlined.Info, null) },
+                        enabled = !state.serviceRunning && !state.isBusy,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -241,6 +243,7 @@ fun HostScreen(
                         onValueChange = { vm.updatePrefs { p -> p.copy(iceServers = it) } },
                         label = { Text("ICE / STUN 穿透服务器 (可选)") },
                         leadingIcon = { Icon(Icons.Outlined.Hub, null) },
+                        enabled = !state.serviceRunning && !state.isBusy,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("例如 stun:stun.l.google.com:19302") }
@@ -255,6 +258,7 @@ fun HostScreen(
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
                             selected = state.prefs.runMode == RunMode.ROOT,
                             onClick = { vm.updatePrefs { it.copy(runMode = RunMode.ROOT) } },
                             label = { Text("Root (su 提权)") },
@@ -267,6 +271,7 @@ fun HostScreen(
                             )
                         )
                         FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
                             selected = state.prefs.runMode == RunMode.SHIZUKU,
                             onClick = { vm.updatePrefs { it.copy(runMode = RunMode.SHIZUKU) } },
                             label = { Text("Shizuku (无线调试/免 Root)") },
@@ -291,14 +296,26 @@ fun HostScreen(
                     )
                 }
 
-                SwitchRow(
-                    title = "开机自启动",
+                if (state.prefs.runMode == RunMode.SHIZUKU) {
+                    TextButton(onClick = vm::requestShizukuPermission) {
+                        Text("请求 Shizuku 授权")
+                    }
+                    Text(
+                        "Shizuku 调试模式在重启后需要重新激活，不支持开机自启动。",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (state.prefs.runMode == RunMode.ROOT) SwitchRow(
+                    title = "开机自启动（Root）",
+                    enabled = !state.serviceRunning && !state.isBusy,
                     subtitle = "系统开机完成或本应用升级后自动拉起受控端服务",
                     checked = state.prefs.autoStart,
                     onChange = { vm.updatePrefs { p -> p.copy(autoStart = it) } }
                 )
                 SwitchRow(
                     title = "前台常驻与防休眠",
+                    enabled = !state.serviceRunning && !state.isBusy,
                     subtitle = "显示常驻状态通知并持有 WakeLock，防止手机灭屏时被系统休眠杀死",
                     checked = state.prefs.keepAlive,
                     onChange = { vm.updatePrefs { p -> p.copy(keepAlive = it) } }

@@ -250,11 +250,12 @@ object AgentController {
     fun exec(cmd: String, useShizuku: Boolean) {
         if (useShizuku) {
             val process = createCmdProcess(cmd, true)
-            process.waitFor()
+            val code = process.waitFor()
+            if (code != 0) throw IOException("Shizuku 命令执行失败 [$code]")
         } else {
             val res = RootShell.execute(cmd)
             if (!res.isSuccess) {
-                Log.d(TAG, "RootShell exec failed [${res.exitCode}]: $cmd -> ${res.output}")
+                throw IOException("命令执行失败 [${res.exitCode}]: ${res.output}")
             }
         }
     }
@@ -311,21 +312,21 @@ object AgentController {
 
         val sig = signaling.trim()
         if (sig.isNotEmpty()) {
-            sb.append("export CP_AGENT_SIGNALING=\"$sig\"; ")
+            sb.append("export CP_AGENT_SIGNALING=${HostCommands.quote(sig)}; ")
         }
 
         // double-fork + setsid + nohup 切断管道绑定
         sb.append("(setsid nohup env GODEBUG=asyncpreemptoff=1 $AGENT_BIN_PATH ")
         if (sig.isNotEmpty()) {
-            sb.append("-signaling \"$sig\" ")
+            sb.append("-signaling ${HostCommands.quote(sig)} ")
         }
         val id = deviceId.trim()
         if (id.isNotEmpty()) {
-            sb.append("-id \"$id\" ")
+            sb.append("-id ${HostCommands.quote(id)} ")
         }
         val ice = iceServers.trim()
         if (ice.isNotEmpty()) {
-            sb.append("-ice-servers \"$ice\" ")
+            sb.append("-ice-servers ${HostCommands.quote(ice)} ")
         }
         sb.append("< /dev/null >> $AGENT_LOG_PATH 2>&1 &)")
         return sb.toString()
@@ -334,7 +335,7 @@ object AgentController {
     fun startAgent(context: Context, useShizuku: Boolean, signaling: String, deviceId: String, iceServers: String) {
         deployBinaries(context, useShizuku)
         val cmd = buildAgentStartCommand(signaling, deviceId, iceServers)
-        Log.i(TAG, "Starting agent: $cmd")
+        Log.i(TAG, "Starting host agent")
         exec(cmd, useShizuku)
     }
 
@@ -349,13 +350,13 @@ object AgentController {
     private fun readPid(cmd: String, useShizuku: Boolean): String {
         val out = execAndRead(cmd, useShizuku).trim()
         if (out.isEmpty()) return ""
-        return out.split(Regex("[\\s\\n]+")).firstOrNull() ?: ""
+        return HostCommands.firstPid(out)
     }
 
     fun stopAgent(useShizuku: Boolean) {
         val cmd = "pkill -f $AGENT_BIN_PATH; pkill cloudphone-agent; pkill cloudphone-agen; pkill -f libsys_core.so"
         try {
-            exec(cmd, useShizuku)
+            exec("$cmd; true", useShizuku)
         } catch (e: Exception) {
             Log.d(TAG, "stopAgent error: ${e.message}")
         }

@@ -19,7 +19,10 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED,
             "android.intent.action.QUICKBOOT_POWERON" -> {
-                if (HostConfig.isAutoStartEnabled(context)) {
+                if (HostConfig.isAutoStartEnabled(context) &&
+                    HostConfig.load(context).signalingUrl.isNotBlank() &&
+                    AgentController.hasAssets(context)
+                ) {
                     Log.i(TAG, "Auto-start enabled, launching AgentHostService...")
                     try {
                         AgentHostService.start(context.applicationContext)
