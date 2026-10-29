@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Card
@@ -55,6 +56,7 @@ object Routes {
     const val APP_SETTINGS = "app_settings"
     const val CERTS = "certs"
     const val ABOUT = "about"
+    const val HOST = "host"
     fun shares(deviceId: String? = null, create: Boolean = false) =
         "$SHARES?deviceId=${deviceId.orEmpty()}&create=$create"
 }
@@ -130,6 +132,9 @@ fun MeTab(vm: HomeViewModel, navigate: (String) -> Unit) {
         SectionCard(title = "投屏") {
             SettingRow("画质与编码", "分辨率、帧率、码率、音频", Icons.Outlined.HighQuality, onClick = { navigate(Routes.STREAM_SETTINGS) })
             SettingRow("快捷文本", "管理文本下发模板", Icons.AutoMirrored.Outlined.ShortText, onClick = { navigate(Routes.QUICK_TEXTS) })
+        }
+        SectionCard(title = "受控") {
+            SettingRow("本机受控端", "开启被控服务，提供远程投屏与控制", Icons.Outlined.PhoneAndroid, tint = AppColors.Brand, onClick = { navigate(Routes.HOST) })
         }
         SectionCard(title = "通用") {
             SettingRow(

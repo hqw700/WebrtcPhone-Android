@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -31,6 +33,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -58,7 +61,7 @@ import com.webrtc_phone.android.ui.theme.AppColors
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(vm: LoginViewModel) {
+fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
 
@@ -144,6 +147,17 @@ fun LoginScreen(vm: LoginViewModel) {
             ) {
                 if (s.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 else Text("登录")
+            }
+
+            Spacer(Modifier.height(14.dp))
+            OutlinedButton(
+                onClick = onOpenHost,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(Icons.Outlined.PhoneAndroid, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("本机受控端模式 (Host Agent)")
             }
 
             Spacer(Modifier.height(16.dp))

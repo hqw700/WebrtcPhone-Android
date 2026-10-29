@@ -11,6 +11,7 @@ webrtc = "123.0.0"
 okhttp = "4.12.0"
 junit = "4.13.2"
 orgJson = "20240303"
+shizuku = "13.1.5"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -31,6 +32,8 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 webrtc = { group = "com.dafruits", name = "webrtc", version.ref = "webrtc" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 

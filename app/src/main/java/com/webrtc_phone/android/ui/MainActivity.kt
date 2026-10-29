@@ -1,5 +1,6 @@
 package com.webrtc_phone.android.ui
 
+import android.app.Application
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -13,6 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -23,6 +27,8 @@ import androidx.navigation.navArgument
 import com.webrtc_phone.android.AppContainer
 import com.webrtc_phone.android.container
 import com.webrtc_phone.android.data.model.AuthSession
+import com.webrtc_phone.android.host.HostScreen
+import com.webrtc_phone.android.host.HostViewModel
 import com.webrtc_phone.android.ui.home.HomeScreen
 import com.webrtc_phone.android.ui.home.HomeViewModel
 import com.webrtc_phone.android.ui.home.Routes
@@ -64,10 +70,18 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root(c: AppContainer) {
     val session by c.sessions.session.collectAsStateWithLifecycle()
+    var showHostScreen by remember { mutableStateOf(false) }
     val s = session
-    if (s == null) {
+    if (showHostScreen) {
+        val hvm: HostViewModel = viewModel(key = "host_root") { HostViewModel(c.appContext as Application) }
+        HostScreen(
+            vm = hvm,
+            currentServerUrl = s?.serverUrl,
+            onBack = { showHostScreen = false }
+        )
+    } else if (s == null) {
         val vm: LoginViewModel = viewModel(key = "login") { LoginViewModel(c) }
-        LoginScreen(vm)
+        LoginScreen(vm, onOpenHost = { showHostScreen = true })
     } else {
         LoggedIn(c, s)
     }
@@ -120,5 +134,9 @@ private fun LoggedIn(c: AppContainer, s: AuthSession) {
         composable(Routes.APP_SETTINGS) { AppSettingsScreen(c.settings) { nav.popBackStack() } }
         composable(Routes.CERTS) { CertificatesScreen(c.pinStore) { nav.popBackStack() } }
         composable(Routes.ABOUT) { AboutScreen { nav.popBackStack() } }
+        composable(Routes.HOST) {
+            val hvm: HostViewModel = viewModel(key = "host_logged_in") { HostViewModel(c.appContext as Application) }
+            HostScreen(vm = hvm, currentServerUrl = s.serverUrl) { nav.popBackStack() }
+        }
     }
 }

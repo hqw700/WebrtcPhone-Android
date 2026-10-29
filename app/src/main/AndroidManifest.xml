@@ -2,11 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- 最小权限：仅网络与音频路由（接收云手机声音走扬声器）。
-         文件上传/下载走 SAF，无需存储权限；摄像头模式采集的是云手机侧摄像头，本机无需 CAMERA。 -->
+    <!-- 基础网络与音频路由 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- 本机受控端（Host Agent）常驻后台与保活所需权限 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".WebrtcPhoneApp"
@@ -40,6 +46,38 @@
             android:supportsPictureInPicture="false"
             android:theme="@style/Theme.WebrtcPhone.Stream"
             android:windowSoftInputMode="adjustNothing|stateHidden" />
+
+        <!-- 本机被控端常驻保活服务 -->
+        <service
+            android:name=".host.AgentHostService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="CloudPhone WebRTC remote screen mirroring and device management agent daemon" />
+        </service>
+
+        <!-- 开机与更新自启动广播接收器 -->
+        <receiver
+            android:name=".host.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shizuku 支持 Provider -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 
 </manifest>

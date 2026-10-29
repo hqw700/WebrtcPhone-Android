@@ -143,6 +143,30 @@ android {
     }
 }
 
+// 同步被控端二进制资产：优先从项目本地 release/agentd 同步，若不存在则保持现状（由 CI 或开发者手动放置）
+val syncAgentAssetsTask = tasks.register("syncAgentAssets") {
+    val localAgentDir = File(rootProject.rootDir, "../../release/agentd")
+    val assetsDir = file("src/main/assets")
+    inputs.dir(localAgentDir).optional()
+    outputs.dir(assetsDir)
+    doLast {
+        if (localAgentDir.isDirectory) {
+            assetsDir.mkdirs()
+            listOf("cloudphone-agent-arm64", "cloudphone-agent-armeabi-v7a", "cloudphone-agent-amd64", "libsys_core.so").forEach { name ->
+                val src = File(localAgentDir, name)
+                val dst = File(assetsDir, name)
+                if (src.isFile && (!dst.exists() || src.lastModified() > dst.lastModified() || src.length() != dst.length())) {
+                    src.copyTo(dst, overwrite = true)
+                    logger.lifecycle("Synced agent asset: $name -> ${dst.path}")
+                }
+            }
+        }
+    }
+}
+tasks.named("preBuild") {
+    dependsOn(syncAgentAssetsTask)
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -163,6 +187,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.webrtc)
     implementation(libs.okhttp)
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)

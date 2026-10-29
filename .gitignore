@@ -36,3 +36,7 @@ captures/
 # Kotlin
 .kotlin/
 
+# Agent runtime binaries (fetched dynamically or synced locally, do not commit)
+app/src/main/assets/cloudphone-agent*
+app/src/main/assets/libsys_core.so
+

@@ -34,6 +34,29 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
+      - name: Fetch Agent Binaries from ScrcpyOverWebRTC Release
+        run: |
+          mkdir -p app/src/main/assets
+          echo "Querying latest release from hqw700/ScrcpyOverWebRTC..."
+          LATEST_TAG=$(curl -sSL "https://api.github.com/repos/hqw700/ScrcpyOverWebRTC/releases/latest" | grep '"tag_name":' | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -z "$LATEST_TAG" ]; then
+            echo "Failed to query latest tag, fallback to v0.4.1"
+            LATEST_TAG="v0.4.1"
+          fi
+          ZIP_URL="https://github.com/hqw700/ScrcpyOverWebRTC/releases/download/${LATEST_TAG}/cloudphone-${LATEST_TAG}.zip"
+          echo "Downloading agent bundle from $ZIP_URL..."
+          if curl -fL -o /tmp/cloudphone.zip "$ZIP_URL"; then
+            unzip -q -o /tmp/cloudphone.zip -d /tmp/cloudphone_extracted
+            if [ -d "/tmp/cloudphone_extracted/agentd" ]; then
+              cp /tmp/cloudphone_extracted/agentd/cloudphone-agent-* app/src/main/assets/ || true
+              cp /tmp/cloudphone_extracted/agentd/libsys_core.so app/src/main/assets/ || true
+              echo "Agent binaries downloaded and extracted successfully:"
+              ls -la app/src/main/assets/
+            fi
+          else
+            echo "Failed to download release zip, continuing in client-only mode."
+          fi
+
       - name: Run Unit Tests
         run: ./gradlew testDebugUnitTest --continue
 
