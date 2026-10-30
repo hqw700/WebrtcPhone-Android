@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material.icons.outlined.Insights
@@ -194,6 +195,7 @@ private fun SliderRow(
 @Composable
 fun AppSettingsScreen(repo: SettingsRepository, onBack: () -> Unit) {
     val a by repo.app.collectAsStateWithLifecycle()
+    val s by repo.stream.collectAsStateWithLifecycle()
     SubScreen("偏好设置", onBack) { pad ->
         Column(Modifier.padding(pad).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             SectionCard(title = "外观") {
@@ -207,6 +209,7 @@ fun AppSettingsScreen(repo: SettingsRepository, onBack: () -> Unit) {
                 SwitchRow("显示虚拟导航键", a.showNavBar, { b -> repo.updateApp { it.copy(showNavBar = b) } }, "画面下方显示 返回/主页/多任务", Icons.Outlined.ViewAgenda)
                 SwitchRow("显示性能指标", a.showStats, { b -> repo.updateApp { it.copy(showStats = b) } }, "延迟、帧率、码率、丢包实时浮层", Icons.Outlined.Insights)
                 SwitchRow("投屏时保持亮屏", a.keepScreenOn, { b -> repo.updateApp { it.copy(keepScreenOn = b) } }, null, Icons.Outlined.ScreenLockPortrait)
+                SwitchRow("开启息屏连接", s.powerOff, { b -> repo.updateStream { it.copy(powerOff = b) } }, "唤醒录屏后自动切断真机显示背光 (防窥省电)", Icons.Outlined.DarkMode)
                 SwitchRow("触控振动反馈", a.haptics, { b -> repo.updateApp { it.copy(haptics = b) } }, null, Icons.Outlined.Vibration)
                 SwitchRow("剪贴板双向同步", a.clipboardSync, { b -> repo.updateApp { it.copy(clipboardSync = b) } }, "本机复制自动同步到云手机，反之亦然", Icons.Outlined.ContentPaste)
                 SwitchRow("断线自动重连", a.autoReconnect, { b -> repo.updateApp { it.copy(autoReconnect = b) } }, "网络切换/抖动后自动恢复（最多 3 次）", Icons.Outlined.Sync)
