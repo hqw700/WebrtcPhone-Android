@@ -5,16 +5,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import rikka.shizuku.Shizuku
-import java.io.BufferedReader
-import java.io.BufferedWriter
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.io.InputStream
-import java.io.InputStreamReader
-import java.io.OutputStream
-import java.io.OutputStreamWriter
-import java.nio.charset.StandardCharsets
 
 object AgentController {
 
@@ -45,103 +38,13 @@ object AgentController {
      * 维持单一持久化的 su 进程，避免每次执行命令 fork 新进程引起授权通知频繁弹出。
      */
     object RootShell {
-        private var process: Process? = null
-        private var writer: BufferedWriter? = null
-        private var reader: BufferedReader? = null
-        private var tokenSeq: Long = 0
-        private val lock = Any()
-
-        fun isAlive(): Boolean {
-            synchronized(lock) {
-                val p = process ?: return false
-                return try {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        p.isAlive
-                    } else {
-                        p.exitValue()
-                        false
-                    }
-                } catch (_: IllegalThreadStateException) {
-                    true
-                }
-            }
-        }
-
-        fun close() {
-            synchronized(lock) {
-                try {
-                    writer?.write("exit\n")
-                    writer?.flush()
-                } catch (_: Throwable) {}
-                try {
-                    process?.destroy()
-                } catch (_: Throwable) {}
-                process = null
-                writer = null
-                reader = null
-            }
-        }
-
-        private fun openInternal(): Boolean {
-            close()
-            return try {
-                val pb = ProcessBuilder("su")
-                pb.redirectErrorStream(true)
-                val p = pb.start()
-                process = p
-                writer = BufferedWriter(OutputStreamWriter(p.outputStream, StandardCharsets.UTF_8))
-                reader = BufferedReader(InputStreamReader(p.inputStream, StandardCharsets.UTF_8))
-                true
-            } catch (t: Throwable) {
-                Log.w(TAG, "RootShell open failed: ${t.message}")
-                close()
-                false
-            }
-        }
-
-        fun execute(cmd: String): CommandResult {
-            synchronized(lock) {
-                if (!isAlive()) {
-                    if (!openInternal()) {
-                        return CommandResult(-1, "无法打开 Root Shell")
-                    }
-                }
-                val token = "__CP_END_${System.currentTimeMillis()}_${++tokenSeq}__"
-                val w = writer ?: return CommandResult(-1, "RootShell writer 为空")
-                val r = reader ?: return CommandResult(-1, "RootShell reader 为空")
-
-                return try {
-                    w.write("$cmd\necho \"$token\" $?\n")
-                    w.flush()
-
-                    val output = StringBuilder()
-                    var line: String?
-                    var exitCode = -1
-                    var found = false
-
-                    while (r.readLine().also { line = it } != null) {
-                        val current = line ?: break
-                        if (current.startsWith(token)) {
-                            found = true
-                            val codeStr = current.substring(token.length).trim()
-                            exitCode = codeStr.toIntOrNull() ?: -1
-                            break
-                        }
-                        output.append(current).append("\n")
-                    }
-
-                    if (!found) {
-                        close()
-                        CommandResult(-1, output.toString())
-                    } else {
-                        CommandResult(exitCode, output.toString())
-                    }
-                } catch (e: IOException) {
-                    Log.w(TAG, "RootShell IO error: ${e.message}")
-                    close()
-                    CommandResult(-1, "IO 错误: ${e.message}")
-                }
-            }
+        private val shell = TimedShell { ProcessBuilder("su").redirectErrorStream(true).start() }
+        fun isAlive() = shell.isAlive()
+        fun close() = shell.close()
+        fun execute(cmd: String): CommandResult = try {
+            shell.execute(cmd).let { CommandResult(it.exitCode, it.output) }
+        } catch (error: Exception) {
+            CommandResult(-1, error.message ?: "Shell 命令失败")
         }
     }
 
@@ -162,8 +65,7 @@ object AgentController {
         var proc: Process? = null
         return try {
             proc = Runtime.getRuntime().exec(arrayOf("which", "su"))
-            val reader = BufferedReader(InputStreamReader(proc.inputStream))
-            reader.readLine() != null
+            ProcessDeadline.run(proc).exitCode == 0
         } catch (_: Exception) {
             false
         } finally {
@@ -249,9 +151,8 @@ object AgentController {
 
     fun exec(cmd: String, useShizuku: Boolean) {
         if (useShizuku) {
-            val process = createCmdProcess(cmd, true)
-            val code = process.waitFor()
-            if (code != 0) throw IOException("Shizuku 命令执行失败 [$code]")
+            val result = ProcessDeadline.run(createCmdProcess(cmd, true))
+            if (result.exitCode != 0) throw IOException("Shizuku 命令执行失败 [${result.exitCode}]")
         } else {
             val res = RootShell.execute(cmd)
             if (!res.isSuccess) {
@@ -261,25 +162,12 @@ object AgentController {
     }
 
     fun execAndRead(cmd: String, useShizuku: Boolean): String {
-        if (useShizuku) {
-            var process: Process? = null
-            return try {
-                process = createCmdProcess(cmd, true)
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val sb = StringBuilder()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    sb.append(line).append("\n")
-                }
-                sb.toString()
-            } catch (e: Exception) {
-                Log.d(TAG, "execAndRead error: ${e.message}")
-                ""
-            } finally {
-                process?.destroy()
-            }
+        return if (useShizuku) {
+            ProcessDeadline.run(createCmdProcess(cmd, true)).output
         } else {
-            return RootShell.execute(cmd).output
+            val result = RootShell.execute(cmd)
+            if (result.exitCode == -1) throw IOException(result.output)
+            result.output
         }
     }
 
@@ -348,7 +236,7 @@ object AgentController {
     }
 
     private fun readPid(cmd: String, useShizuku: Boolean): String {
-        val out = execAndRead(cmd, useShizuku).trim()
+        val out = runCatching { execAndRead(cmd, useShizuku).trim() }.getOrDefault("")
         if (out.isEmpty()) return ""
         return HostCommands.firstPid(out)
     }

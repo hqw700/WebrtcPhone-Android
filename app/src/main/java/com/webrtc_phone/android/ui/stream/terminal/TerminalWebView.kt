@@ -22,6 +22,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.webrtc_phone.android.rtc.channel.TerminalChannel
+import com.webrtc_phone.android.rtc.channel.TerminalOutputBuffer
 
 /** xterm.js → native：键盘输入（base64，保证控制字符/UTF-8 无损） */
 class TerminalBridge(private val onInput: (ByteArray) -> Unit) {
@@ -166,6 +167,7 @@ class TerminalWebView(context: Context) : WebView(context) {
             override fun onPageFinished(view: WebView, url: String) {
                 pageReady = true
                 applyFont.run()
+                flushOutput.run()
                 maybeStart()
             }
         }
@@ -200,7 +202,6 @@ class TerminalWebView(context: Context) : WebView(context) {
         if (ch.pollState() != com.webrtc_phone.android.rtc.channel.TerminalState.OPEN) return
         startedFor = ch
         if (ch.initialized) {
-            write(ch.history())
             focusTerminal()
             return
         }
@@ -228,13 +229,26 @@ class TerminalWebView(context: Context) : WebView(context) {
         }, 200)
     }
 
+    internal fun writeOutput(output: TerminalOutputBuffer.Output) {
+        if (output.reset) {
+            main.removeCallbacks(flushOutput)
+            pendingOutput.reset()
+            flushScheduled = false
+            if (pageReady) evaluateJavascript("term.reset()", null)
+        }
+        if (output.skippedBytes > 0) {
+            Toast.makeText(context, "输出超过历史缓存，已重新加载最近内容", Toast.LENGTH_LONG).show()
+        }
+        write(output.bytes)
+    }
+
     fun write(bytes: ByteArray) {
-        if (bytes.isEmpty() || !pageReady) return
+        if (bytes.isEmpty()) return
         // 将一帧内的碎片合并，避免每个 DataChannel 消息都跨进程调用 JS。
         pendingOutput.write(bytes)
         if (!flushScheduled) {
             flushScheduled = true
-            main.postDelayed(flushOutput, 16)
+            if (pageReady) main.postDelayed(flushOutput, 16)
         }
     }
 

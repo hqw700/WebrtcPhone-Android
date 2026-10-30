@@ -92,7 +92,8 @@ fun StreamScreen(
     DisposableEffect(termView) { onDispose { termView?.release() } }
     LaunchedEffect(termView, terminal) {
         val v = termView ?: return@LaunchedEffect
-        terminal?.output?.collect { v.write(it) }
+        v.bind(terminal)
+        terminal?.output?.collect { v.writeOutput(it) }
     }
 
     // 侧边栏：只允许按钮/长按悬浮球打开；关闭时禁用手势，避免边缘滑动抢走云手机的返回手势
