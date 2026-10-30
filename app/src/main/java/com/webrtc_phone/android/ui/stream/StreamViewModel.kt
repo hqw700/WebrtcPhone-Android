@@ -71,7 +71,7 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
     val videoSize =
         if (initial.isWs) _wsSession.flatMapLatest { it?.videoSize ?: flowOf(initial.displayHint) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, initial.displayHint)
-        else session.flatMapLatest { it?.videoSize ?: flowOf(null) }
+        else session.flatMapLatest { it?.videoSize ?: flowOf(initial.displayHint) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, initial.displayHint)
     val firstFrame =
         if (initial.isWs) _wsSession.flatMapLatest { it?.firstFrame ?: flowOf(false) }

@@ -76,11 +76,12 @@ class StreamActivity : ComponentActivity() {
                 })
             }
         } else {
-            SurfaceViewRenderer(this).apply {
+            StaticFrameRenderer(this).apply {
                 init(vm.eglContext, null)
                 setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                // 交给硬件合成器缩放，比 GL 逐帧缩放更省电、延迟更低
-                setEnableHardwareScaler(true)
+                // 固定 Surface 为视图尺寸，避免首帧尺寸更新再次重建缓冲区。
+                // 静止画面可能没有后续帧，硬件缩放时会暂时显示被拉伸的旧缓冲。
+                setEnableHardwareScaler(false)
                 isFocusable = true
                 isFocusableInTouchMode = true
                 renderer = this
@@ -149,7 +150,7 @@ class StreamActivity : ComponentActivity() {
     private fun applyOrientation() {
         val mode = vm.settings.app.value.orientationLock
         val size = vm.videoSize.value
-        requestedOrientation = when (mode) {
+        val orientation = when (mode) {
             "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             "sensor" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
@@ -160,6 +161,7 @@ class StreamActivity : ComponentActivity() {
                 else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             }
         }
+        if (requestedOrientation != orientation) requestedOrientation = orientation
     }
 
     private fun applyKeepScreenOn(on: Boolean) {

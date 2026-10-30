@@ -6,6 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
+import java.io.ByteArrayOutputStream
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -33,6 +36,28 @@ class TerminalWebView(context: Context) : WebView(context) {
     @Volatile private var channel: TerminalChannel? = null
     private var pageReady = false
     private var startedFor: TerminalChannel? = null
+    private val pendingOutput = ByteArrayOutputStream()
+    private var flushScheduled = false
+    private val flushOutput = Runnable {
+        flushScheduled = false
+        if (pageReady && pendingOutput.size() > 0) {
+            val bytes = pendingOutput.toByteArray()
+            pendingOutput.reset()
+            var offset = 0
+            while (offset < bytes.size) {
+                val count = minOf(32 * 1024, bytes.size - offset)
+                val b64 = Base64.encodeToString(bytes, offset, count, Base64.NO_WRAP)
+                evaluateJavascript("termWrite('$b64')", null)
+                offset += count
+            }
+        }
+    }
+    private val tapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onSingleTapUp(event: MotionEvent): Boolean {
+            focusTerminal()
+            return false
+        }
+    })
 
     init {
         setBackgroundColor(0)
@@ -68,6 +93,9 @@ class TerminalWebView(context: Context) : WebView(context) {
             return
         }
         channel = ch
+        main.removeCallbacks(flushOutput)
+        pendingOutput.reset()
+        flushScheduled = false
         if (pageReady) evaluateJavascript("term.reset()", null)
         startedFor = null
         maybeStart()
@@ -110,13 +138,11 @@ class TerminalWebView(context: Context) : WebView(context) {
 
     fun write(bytes: ByteArray) {
         if (bytes.isEmpty() || !pageReady) return
-        // 大块输出分片，避免单次 evaluateJavascript 过大
-        var off = 0
-        while (off < bytes.size) {
-            val end = minOf(bytes.size, off + 32 * 1024)
-            val b64 = Base64.encodeToString(bytes, off, end - off, Base64.NO_WRAP)
-            evaluateJavascript("termWrite('$b64')", null)
-            off = end
+        // 将一帧内的碎片合并，避免每个 DataChannel 消息都跨进程调用 JS。
+        pendingOutput.write(bytes)
+        if (!flushScheduled) {
+            flushScheduled = true
+            main.postDelayed(flushOutput, 16)
         }
     }
 
@@ -126,9 +152,12 @@ class TerminalWebView(context: Context) : WebView(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
-        val r = super.onTouchEvent(event)
-        if (event.actionMasked == android.view.MotionEvent.ACTION_UP) focusTerminal()
-        return r
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        tapDetector.onTouchEvent(event)
+        return super.onTouchEvent(event)
     }
 
     fun focusTerminal() {
@@ -141,11 +170,17 @@ class TerminalWebView(context: Context) : WebView(context) {
     }
 
     fun clear() {
+        main.removeCallbacks(flushOutput)
+        pendingOutput.reset()
+        flushScheduled = false
         if (pageReady) evaluateJavascript("term.clear()", null)
         channel?.clearHistory()
     }
 
     fun release() {
+        main.removeCallbacksAndMessages(null)
+        pendingOutput.reset()
+        pageReady = false
         channel = null
         removeJavascriptInterface("AndroidBridge")
         destroy()
