@@ -8,6 +8,14 @@ import android.util.Base64
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.ScaleGestureDetector
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
+import org.json.JSONTokener
 import java.io.ByteArrayOutputStream
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
@@ -52,15 +60,97 @@ class TerminalWebView(context: Context) : WebView(context) {
             }
         }
     }
+    private val preferences = context.getSharedPreferences("terminal_display", Context.MODE_PRIVATE)
+    private var fontSize = preferences.getFloat("font_size", 13f).coerceIn(9f, 26f)
+    private var multiTouch = false
+    private var selecting = false
+    private var gestureId = 0
+    private var selectionMode: ActionMode? = null
+    private val applyFont = Runnable {
+        if (pageReady) evaluateJavascript("setTerminalFontSize($fontSize)", null)
+    }
+    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            selectionMode?.finish()
+            return true
+        }
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            fontSize = (fontSize * detector.scaleFactor).coerceIn(9f, 26f)
+            removeCallbacks(applyFont)
+            postOnAnimation(applyFont)
+            return true
+        }
+        override fun onScaleEnd(detector: ScaleGestureDetector) {
+            preferences.edit().putFloat("font_size", fontSize).apply()
+        }
+    })
     private val tapDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+        override fun onDown(event: MotionEvent) = true
         override fun onSingleTapUp(event: MotionEvent): Boolean {
-            focusTerminal()
-            return false
+            if (selectionMode != null) selectionMode?.finish() else focusTerminal()
+            return true
+        }
+        override fun onLongPress(event: MotionEvent) {
+            if (!multiTouch && pageReady && width > 0 && height > 0) {
+                selecting = true
+                val currentGesture = gestureId
+                cancelWebTouch(event)
+                selectAt(event, false) { selected ->
+                    if (pageReady && currentGesture == gestureId && !multiTouch && selected == "true") showSelectionMenu()
+                }
+            }
         }
     })
 
+    private fun cancelWebTouch(event: MotionEvent) {
+        val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+        super.onTouchEvent(cancel)
+        cancel.recycle()
+    }
+
+    private fun selectAt(event: MotionEvent, extend: Boolean, callback: ((String?) -> Unit)? = null) {
+        val x = event.x / width.coerceAtLeast(1)
+        val y = event.y / height.coerceAtLeast(1)
+        evaluateJavascript("terminalSelectAt($x,$y,$extend)", callback)
+    }
+
+    private fun showSelectionMenu() {
+        if (selectionMode != null) return
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        selectionMode = startActionMode(object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                menu.add(0, 1, 0, "复制").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                menu.add(0, 2, 1, "全选")
+                return true
+            }
+            override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                when (item.itemId) {
+                    1 -> evaluateJavascript("term.getSelection()") { result ->
+                        val text = runCatching { JSONTokener(result).nextValue() as? String }.getOrNull()
+                        if (!text.isNullOrEmpty()) {
+                            context.getSystemService(ClipboardManager::class.java)
+                                ?.setPrimaryClip(ClipData.newPlainText("终端", text))
+                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        }
+                        mode.finish()
+                    }
+                    2 -> evaluateJavascript("term.selectAll()", null)
+                    else -> return false
+                }
+                return true
+            }
+            override fun onDestroyActionMode(mode: ActionMode) {
+                selecting = false
+                selectionMode = null
+                if (pageReady) evaluateJavascript("term.clearSelection()", null)
+            }
+        }, ActionMode.TYPE_FLOATING)
+    }
+
     init {
         setBackgroundColor(0)
+        setOnLongClickListener { true }
         settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = false
@@ -75,6 +165,7 @@ class TerminalWebView(context: Context) : WebView(context) {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
             override fun onPageFinished(view: WebView, url: String) {
                 pageReady = true
+                applyFont.run()
                 maybeStart()
             }
         }
@@ -92,6 +183,7 @@ class TerminalWebView(context: Context) : WebView(context) {
             maybeStart()
             return
         }
+        selectionMode?.finish()
         channel = ch
         main.removeCallbacks(flushOutput)
         pendingOutput.reset()
@@ -153,11 +245,33 @@ class TerminalWebView(context: Context) : WebView(context) {
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+            MotionEvent.ACTION_DOWN -> {
+                gestureId++
+                multiTouch = false
+                selecting = false
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                gestureId++
+                multiTouch = true
+                selecting = false
+                val cancel = MotionEvent.obtain(event).apply { action = MotionEvent.ACTION_CANCEL }
+                super.onTouchEvent(cancel)
+                tapDetector.onTouchEvent(cancel)
+                cancel.recycle()
+            }
         }
-        tapDetector.onTouchEvent(event)
-        return super.onTouchEvent(event)
+        scaleDetector.onTouchEvent(event)
+        if (!multiTouch) {
+            tapDetector.onTouchEvent(event)
+            if (selecting && event.actionMasked == MotionEvent.ACTION_MOVE) selectAt(event, true)
+        }
+        val consumed = if (multiTouch || selecting || selectionMode != null) true else super.onTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            selecting = false
+            parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        return consumed
     }
 
     fun focusTerminal() {
@@ -178,6 +292,9 @@ class TerminalWebView(context: Context) : WebView(context) {
     }
 
     fun release() {
+        gestureId++
+        selectionMode?.finish()
+        removeCallbacks(applyFont)
         main.removeCallbacksAndMessages(null)
         pendingOutput.reset()
         pageReady = false

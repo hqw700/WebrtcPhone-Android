@@ -48,6 +48,47 @@
     term.write(bytes);
   }
 
+  // 只调整本地显示，不向 PTY 注入 resize 控制数据。
+  function setTerminalFontSize(size) {
+    var top = term.buffer.active.viewportY;
+    var atBottom = top >= term.buffer.active.baseY;
+    term.options.fontSize = Math.max(9, Math.min(26, size));
+    fitTerminal();
+    if (!atBottom) term.scrollToLine(top);
+  }
+
+  var selectionAnchor = null;
+  function terminalSelectAt(xFraction, yFraction, extend) {
+    var screen = document.querySelector('.xterm-screen');
+    if (!screen) return false;
+    var rect = screen.getBoundingClientRect();
+    var x = xFraction * window.innerWidth;
+    var y = yFraction * window.innerHeight;
+    if (!extend && (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom)) return false;
+    var col = Math.max(0, Math.min(term.cols - 1, Math.floor((x - rect.left) / (rect.width / term.cols))));
+    var row = term.buffer.active.viewportY + Math.max(0, Math.min(term.rows - 1, Math.floor((y - rect.top) / (rect.height / term.rows))));
+    if (!extend) {
+      var line = term.buffer.active.getLine(row);
+      if (!line) return false;
+      var start = col, end = col;
+      function wordCell(index) {
+        var cell = line.getCell(index);
+        return cell && (cell.getWidth() === 0 || /[^\s]/.test(cell.getChars()));
+      }
+      if (wordCell(col)) {
+        while (start > 0 && wordCell(start - 1)) start--;
+        while (end + 1 < term.cols && wordCell(end + 1)) end++;
+      }
+      selectionAnchor = row * term.cols + start;
+      term.select(start, row, end - start + 1);
+    } else if (selectionAnchor !== null) {
+      var position = row * term.cols + col;
+      var first = Math.min(selectionAnchor, position);
+      term.select(first % term.cols, Math.floor(first / term.cols), Math.abs(position - selectionAnchor) + 1);
+    }
+    return term.hasSelection();
+  }
+
   function focusTerm() { term.focus(); }
 
   window.addEventListener('resize', function() { fitTerminal(); });
