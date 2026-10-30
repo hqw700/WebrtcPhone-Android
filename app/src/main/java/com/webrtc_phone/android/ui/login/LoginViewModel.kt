@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class LoginUiState(
     val server: String = "",
@@ -93,31 +95,41 @@ class LoginViewModel(private val c: AppContainer) : ViewModel() {
         }
         if (s.loading) return
         _state.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 repo.login(ep, username, s.password)
                 if (s.rememberPassword) repo.savePassword(ep.serialize(), username, s.password)
                 else repo.clearPassword(ep.serialize(), username)
             } catch (e: ApiException.UntrustedCertificate) {
-                pendingAction = ::login
-                _state.update { it.copy(untrusted = e.info) }
+                withContext(Dispatchers.Main) {
+                    pendingAction = ::login
+                    _state.update { it.copy(untrusted = e.info) }
+                }
             } catch (e: ApiException) {
                 if (e is ApiException.Unauthorized) repo.clearPassword(ep.serialize(), username)
                 val msg = if (!ep.secure && e is ApiException.Network) "${e.message}（当前为 HTTP 明文连接）" else e.message
-                _state.update { it.copy(error = msg) }
+                withContext(Dispatchers.Main) {
+                    _state.update { it.copy(error = msg) }
+                }
             } finally {
-                _state.update { it.copy(loading = false) }
+                withContext(Dispatchers.Main) {
+                    _state.update { it.copy(loading = false) }
+                }
             }
         }
     }
 
     fun trustCertificate() {
         val info = _state.value.untrusted ?: return
-        c.pinStore.pin(info.endpointKey, info)
-        ServerEndpoint.parse(_state.value.server)?.let { c.httpFactory.invalidate(it) }
-        _state.update { it.copy(untrusted = null) }
-        pendingAction?.invoke()
-        pendingAction = null
+        viewModelScope.launch(Dispatchers.IO) {
+            c.pinStore.pin(info.endpointKey, info)
+            ServerEndpoint.parse(_state.value.server)?.let { c.httpFactory.invalidate(it) }
+            withContext(Dispatchers.Main) {
+                _state.update { it.copy(untrusted = null) }
+                pendingAction?.invoke()
+                pendingAction = null
+            }
+        }
     }
 
     fun dismissCertificate() {

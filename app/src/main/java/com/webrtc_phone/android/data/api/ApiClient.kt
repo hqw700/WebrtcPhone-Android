@@ -57,17 +57,17 @@ class ApiClient(
 
     suspend fun getEnvelope(path: String): JSONObject = envelope(get(path))
 
-    private suspend fun execute(builder: Request.Builder, auth: Boolean): String {
-        if (auth) {
-            val token = tokenProvider() ?: throw ApiException.Unauthorized()
-            builder.header("Authorization", "Bearer $token")
-        }
-        val response = try {
-            http.newCall(builder.build()).await()
-        } catch (e: Exception) {
-            throw ApiException.from(e)
-        }
-        return withContext(Dispatchers.IO) {
+    private suspend fun execute(builder: Request.Builder, auth: Boolean): String =
+        withContext(Dispatchers.IO) {
+            if (auth) {
+                val token = tokenProvider() ?: throw ApiException.Unauthorized()
+                builder.header("Authorization", "Bearer $token")
+            }
+            val response = try {
+                http.newCall(builder.build()).await()
+            } catch (e: Exception) {
+                throw ApiException.from(e)
+            }
             response.use { r ->
                 val text = try {
                     r.body?.string().orEmpty()
@@ -86,7 +86,6 @@ class ApiClient(
                 }
             }
         }
-    }
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()

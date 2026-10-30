@@ -4,6 +4,7 @@ import com.webrtc_phone.android.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 
@@ -12,6 +13,10 @@ import javax.net.ssl.SSLContext
  * 每个服务器端点拥有自己的 TLS 信任配置（证书固定按端点隔离）。
  */
 class HttpClientFactory(private val pinStore: CertificatePinStore) {
+
+    private val poolEvictExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "HttpClient-EvictPool").apply { isDaemon = true }
+    }
 
     private val root: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -41,7 +46,11 @@ class HttpClientFactory(private val pinStore: CertificatePinStore) {
     /** 证书信任关系变化后需丢弃缓存的 TLS 会话 */
     fun invalidate(endpoint: ServerEndpoint) {
         cache.keys.filter { it.contains("|" + endpoint.key + "|") }.forEach { cache.remove(it) }
-        root.connectionPool.evictAll()
+        // 关闭池中的 Socket 时，底层 TLS 实现（如 Conscrypt）会向网络发送 close_notify，
+        // 严禁在主线程同步执行，必须投递到独立后台线程清理，防止 NetworkOnMainThreadException
+        poolEvictExecutor.execute {
+            runCatching { root.connectionPool.evictAll() }
+        }
     }
 
     private fun build(endpoint: ServerEndpoint, ws: Boolean): OkHttpClient {
