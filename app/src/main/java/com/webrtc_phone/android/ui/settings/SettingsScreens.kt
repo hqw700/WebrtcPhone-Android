@@ -160,6 +160,10 @@ fun StreamQualityEditor(
             }
         }
         SwitchRow("传输声音", s.audio, { b -> onChange { it.copy(audio = b) } }, subtitle = "Opus 音频，关闭可节省约 128Kbps", enabled = !lockAudio)
+        SwitchRow(
+            "开启息屏连接", s.powerOff, { b -> onChange { it.copy(powerOff = b) } },
+            subtitle = "唤醒录屏后自动切断真机显示背光 (防窥省电)",
+        )
     }
 }
 

@@ -34,6 +34,7 @@ data class StreamSettings(
     val minBitrateMbps: Int = 1,
     val maxBitrateMbps: Int = 20,
     val audio: Boolean = true,
+    val powerOff: Boolean = false,
 ) {
     fun withPreset(p: QualityPreset): StreamSettings =
         if (p == QualityPreset.CUSTOM) copy(preset = p)
@@ -76,6 +77,7 @@ class SettingsRepository(context: Context) {
             .putInt("s_min_bitrate", v.minBitrateMbps)
             .putInt("s_max_bitrate", v.maxBitrateMbps)
             .putBoolean("s_audio", v.audio)
+            .putBoolean("s_power_off", v.powerOff)
             .apply()
         _stream.value = v
     }
@@ -123,6 +125,7 @@ class SettingsRepository(context: Context) {
             minBitrateMbps = prefs.getInt("s_min_bitrate", d.minBitrateMbps),
             maxBitrateMbps = prefs.getInt("s_max_bitrate", d.maxBitrateMbps),
             audio = prefs.getBoolean("s_audio", d.audio),
+            powerOff = prefs.getBoolean("s_power_off", d.powerOff),
         )
     }
 

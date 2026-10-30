@@ -374,6 +374,16 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
 
     // ---------- 音频 / 画质 / 摄像头 ----------
 
+    val powerOff: Boolean get() = target.settings.powerOff
+
+    fun togglePowerOff() {
+        val newPowerOff = !powerOff
+        settings.updateStream { it.copy(powerOff = newPowerOff) }
+        val newTarget = target.copy(settings = settings.stream.value)
+        toast(if (newPowerOff) "开启息屏连接 (防窥省电)" else "恢复正常亮屏连接")
+        reconnectWith(newTarget)
+    }
+
     fun toggleAudio() {
         audioOn = !audioOn
         manager.setAudioEnabled(audioOn)

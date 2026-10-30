@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ContentPasteGo
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.material.icons.outlined.HighQuality
@@ -43,6 +44,15 @@ fun toolSections(
             @Suppress("DEPRECATION")
             ToolItem("断开", Icons.Outlined.Logout, true) { close(); onExit() },
             ToolItem("电源", Icons.Outlined.PowerSettingsNew, control, onLongClick = { vm.longPress(Keys.POWER) }) { vm.press(Keys.POWER) },
+            ToolItem(
+                label = if (vm.powerOff) "息屏中" else "息屏连接",
+                icon = Icons.Outlined.DarkMode,
+                enabled = connected && !t.isCamera,
+                active = vm.powerOff,
+            ) {
+                close()
+                vm.togglePowerOff()
+            },
             ToolItem("音量+", Icons.Outlined.VolumeUp, control) { vm.press(Keys.VOLUME_UP) },
             ToolItem("音量-", Icons.Outlined.VolumeDown, control) { vm.press(Keys.VOLUME_DOWN) },
             ToolItem("通知栏", Icons.Outlined.Notifications, control) { vm.press(Keys.NOTIFICATION) },
