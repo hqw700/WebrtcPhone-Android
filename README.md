@@ -189,7 +189,7 @@ export KEY_PASSWORD=your_key_password
 
 本工程已内置完整自动化构建工作流 [`.github/workflows/build.yml`](.github/workflows/build.yml)：
 
-- **触发条件**: 任意向 `main` / `master` 分支的 Push 或 Pull Request，以及打版本 Tag（如 `v0.4.2`）。
+- **触发条件**: 任意向 `main` / `master` 分支的 Push 或 Pull Request，以及打版本 Tag（如 `v0.4.3`）。
 - **自动化操作**:
   1. 检出代码并配置 JDK 17 环境。
   2. 运行自动化单元测试（纯 JVM，毫秒级快速反馈）。
