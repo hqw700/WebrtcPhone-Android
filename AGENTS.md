@@ -25,7 +25,7 @@
 - 屏幕易锁：先 `adb shell input keyevent 224` + 上滑解锁。
 - `adb shell input text` 不支持 `;`、引号；空格用 `%s`。`keyevent 111`（ESC）会被输入框当字符吃掉，收键盘用 `keyevent 4`。
 - 日志：`adb logcat -d | grep -E "RtcSession|SessionManager|Terminal|AndroidRuntime"`，崩溃 `adb logcat -d -b crash`。
-- agent 日志在云手机 `/data/local/tmp/cloudphone-agent.log`（可在 App 终端里查看）。
+- 本机被控端启动日志：Root 为 `/data/local/tmp/cloudphone-agent-run.log`，Shizuku 为 `/data/local/tmp/cloudphone-agent-shizuku-run.log`。先核实当前 PID、模式及日志时间，避免将旧日志当成当前启动结果；历史故障见 [Shizuku 启动故障复盘](docs/SHIZUKU_STARTUP_TROUBLESHOOTING.md)。其他部署方式的 Agent 日志可能在 `/data/local/tmp/cloudphone-agent.log`。
 - 服务端源码在上层仓库：信令 `webrtc-operator/standalone/main.go`（路由表在 `registerAppRoutes`），agent `android-agentd/cloudphone-agent/webrtc.go`。**协议有疑问先读这两处源码，不要猜。**
 
 ## 代码约定

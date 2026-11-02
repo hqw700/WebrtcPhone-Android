@@ -19,18 +19,25 @@ internal object ProcessDeadline {
     )
     fun alive(process: Process): Boolean = try { process.exitValue(); false } catch (_: IllegalThreadStateException) { true }
 
-    fun run(process: Process, timeoutMs: Long = 15_000): ShellResult {
+    fun run(
+        process: Process,
+        timeoutMs: Long = 15_000,
+        isAlive: () -> Boolean = { alive(process) }
+    ): ShellResult {
         val end = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
         val alarm = guard(process, timeoutMs)
         val output = ByteArrayOutputStream()
         try {
+            // Shizuku 的 stderr getter 每次创建新包装，轮询时必须复用同一条流。
+            val stdout = process.inputStream
+            val stderr = process.errorStream
             while (true) {
                 if (Thread.currentThread().isInterrupted || System.nanoTime() >= end) throw TimeoutException("Shell 命令超时")
-                drain(process.inputStream, output)
-                drain(process.errorStream, output)
-                if (!alive(process)) {
-                    drain(process.inputStream, output)
-                    drain(process.errorStream, output)
+                drain(stdout, output)
+                drain(stderr, output)
+                if (!isAlive()) {
+                    drain(stdout, output)
+                    drain(stderr, output)
                     return ShellResult(process.exitValue(), output.toString("UTF-8"))
                 }
                 Thread.sleep(10)

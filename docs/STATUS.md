@@ -1,5 +1,37 @@
 # WebrtcPhone 进度与待办
 
+本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
+
+## 2026-11-02 Shizuku 启动被旧 Root 日志阻断
+
+- ADB 确认截图来自已连接的 Android 15 真机：Shizuku 正常运行，但 Agent 不在进程列表中。`cloudphone-agent-run.log` 属于 `root:root`，权限 `0644`；01:20:23–24 的注册、鉴权成功信息是旧日志。
+- 以 shell 身份复现：后台日志重定向报 `Permission denied`，而外层启动 Shell 仍返回 0，导致 watchdog 未记录具体错误，界面最终只提示“Agent 尚未启动”。
+- Shizuku 模式改用 `/data/local/tmp/cloudphone-agent-shizuku-run.log`，Root 保留原日志路径。启动前在子 Shell 同步验证日志可写，再启动后台进程；Shizuku 命令失败时将 stderr 一并返回界面。未生成当前模式日志时直接显示暂无日志，避免误读另一模式的旧记录。
+- Agent 的旧版兼容逻辑仍依赖固定 `/data/local/tmp/libsys_core.so`，本次保留组件路径，只隔离日志。回归新增模式日志隔离及日志重定向失败退出码检查；`compileDebugKotlin`、全部 56 个 JVM 测试与 `assembleRelease`（R8）通过。
+- 已将修复后的签名 Release APK 覆盖安装到这台真机，保留原配置和 Shizuku 授权。App 内启动后 PID 11057、界面显示“正在受控运行中”，新日志完成信令注册与鉴权；App 内停止后 PID 消失，再次启动 PID 11289，再次注册鉴权成功。最终保持 Shizuku 被控服务运行。
+
+## 2026-11-02 Shizuku 命令状态检测修复
+
+- `ProcessDeadline` 原先轮询 `exitValue()`，只捕获 `IllegalThreadStateException`。该异常继承 `IllegalArgumentException`，经过 Binder 后只保留父类型，导致正常运行中的 Shizuku 命令直接报 `process hasn't exited`；二进制部署、PID 检测与日志读取共用此路径。
+- Shizuku 命令改为通过 `ShizukuRemoteProcess.alive()` 查询远端存活状态，仅在退出后读取退出码；保留原有 15 秒超时和输出上限。普通本地进程与 Root Shell 继续使用原来的状态检测方式。
+- 命令执行期间缓存 stdout/stderr，避免 Shizuku 的 stderr getter 在轮询中反复创建流包装。
+- 回归覆盖 Binder 异常模拟、远端命令超时、状态查询错误直接传播以及输出流复用；当时 `compileDebugKotlin`、全部 54 个 JVM 单元测试与 `assembleRelease`（R8）通过。连接的 Android 真机已通过独立 Parcel 探针复现异常类型转换，临时文件已清理；完整 Shizuku 启动流程验证见上节。
+
+## 2026-11-02 App Root / ADB 路径差异排查
+
+- 客户完整日志确认实际运行的是 v0.4.3 / 1b7d786，且已自动降权到 shell。11 月 1 日补 `-root` 的兼容修正不能解释或修复这次故障。
+- `FakeContext` 启动阶段初始化失败，剪贴板创建失败是后续表现；首次触控在 `InputManager.create()` 再次访问该类，触发 `NoClassDefFoundError` 后退出。真正最初的 `ActivityThread.getSystemContext()` 异常仍被旧核心吞掉。
+- 客户确认同机 ADB 部署正常、App Root 部署异常；环境无法从开发机直接连接。`setupAndroidEnvironment()` 虽读取 adbd 环境，但只补空值，App 继承的非空启动变量仍会保留；仅凭 loaded environment 日志不能证明启动环境已一致。尚无客户侧证据确认具体哪个变量或 SELinux/mount 上下文引起。
+- 新增外层 `scripts/diagnostics/host-launch-probe/`，采集 App Agent 的实际环境白名单、权限和 mount namespace，再以同样 shell 凭据重放独立 Context 诊断。SELinux 只记录不切换。无需替换客户业务组件；需客户保留 App Agent 运行后在可连接该设备的电脑上采集。
+
+## 2026-11-01 被控端旧 Agent 的 Root 启动兼容
+
+- 对比本机产物：WebrtcPhone 原内置 arm64 Agent 自报 v0.4.1（963b7b8，2026-10-10）；WebrtcTest release APK 内的 Agent 自报 v0.4.2（f4ef7f9，2026-10-31）。两 APK 的 `libsys_core.so` SHA-256 相同，因此不能仅依据 Java 堆栈认定两版使用了不同的核心 JAR。用户实际安装包仍需对应核实。
+- v0.4.1 需要 `-root` 才将 CoreService 降权为 shell，v0.4.2 已自动按 Agent UID 降权。Root 模式启动命令现显式传入 `-root`，兼容旧 Agent；Shizuku 模式不传。新版 Agent 仍接受该参数。
+- 已用旧 v0.4.1 二进制、本机 loopback 测试信令及仅打印 UID 的 `app_process` 替身验证：不带参数的子进程 UID 为 0，带 `-root` 为 2000。该验证不启动 Java 核心或视频采集，不等同于故障云手机上的复现/修复确认。
+- 本地资源已通过 `scripts/fetch-agent-assets.sh` 刷新为 GitHub 最新正式 v0.4.3，下载包 SHA-256 校验通过。资源被 Git 忽略，本地构建前须先刷新；CI 已有对应步骤。
+- 新旧 App 使用同一组 `/data/local/tmp` 路径和全局进程名。复测时先停止两边被控服务，再只启动新版，避免旧服务继续运行或 watchdog 把另一版组件重新部署回来。
+
 ## 2026-10-30 Shell 超时与终端输出完整性
 
 - 分支 `codex/fix-shell-timeouts-terminal-output`：Root 常驻 Shell 和 Shizuku 命令增加 15 秒截止时间，等待 Root Shell 命令锁也有时限；超时销毁旧进程，下一条命令重新建会话。stdout/stderr 同时排空，输出上限 1 MiB，避免进程管道堵塞或读取无换行内容时永久等待。

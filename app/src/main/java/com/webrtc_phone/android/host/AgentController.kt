@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuRemoteProcess
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -28,6 +29,10 @@ object AgentController {
     const val AGENT_BIN_PATH = "/data/local/tmp/cloudphone-agent"
     const val LIBSYS_PATH = "/data/local/tmp/libsys_core.so"
     const val AGENT_LOG_PATH = "/data/local/tmp/cloudphone-agent-run.log"
+    private const val SHIZUKU_AGENT_LOG_PATH = "/data/local/tmp/cloudphone-agent-shizuku-run.log"
+
+    internal fun agentLogPath(useShizuku: Boolean): String =
+        if (useShizuku) SHIZUKU_AGENT_LOG_PATH else AGENT_LOG_PATH
 
     data class CommandResult(val exitCode: Int, val output: String) {
         val isSuccess: Boolean get() = exitCode == 0
@@ -127,32 +132,37 @@ object AgentController {
         return "cloudphone-agent-arm64"
     }
 
-    private fun createCmdProcess(cmd: String, useShizuku: Boolean): Process {
-        if (useShizuku) {
-            if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                throw IOException("Shizuku 服务未运行或未被授权")
-            }
-            return try {
-                val method = Shizuku::class.java.getDeclaredMethod(
-                    "newProcess",
-                    Array<String>::class.java,
-                    Array<String>::class.java,
-                    String::class.java
-                )
-                method.isAccessible = true
-                method.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
-            } catch (e: Exception) {
-                throw IOException("Shizuku 进程启动失败: ${e.message}", e)
-            }
-        } else {
-            return Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+    private fun createShizukuProcess(cmd: String): ShizukuRemoteProcess {
+        if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            throw IOException("Shizuku 服务未运行或未被授权")
         }
+        return try {
+            val method = Shizuku::class.java.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            method.isAccessible = true
+            method.invoke(null, arrayOf("sh", "-c", cmd), null, null) as ShizukuRemoteProcess
+        } catch (e: Exception) {
+            throw IOException("Shizuku 进程启动失败: ${e.message}", e)
+        }
+    }
+
+    private fun runShizukuCommand(cmd: String): ShellResult {
+        val process = createShizukuProcess(cmd)
+        // exitValue() 的“尚未退出”异常经过 Binder 后不再是 IllegalThreadStateException。
+        // 使用远端状态接口，避免正常运行中的命令被误判为失败，同时保留截止时间保护。
+        return ProcessDeadline.run(process, isAlive = process::alive)
     }
 
     fun exec(cmd: String, useShizuku: Boolean) {
         if (useShizuku) {
-            val result = ProcessDeadline.run(createCmdProcess(cmd, true))
-            if (result.exitCode != 0) throw IOException("Shizuku 命令执行失败 [${result.exitCode}]")
+            val result = runShizukuCommand(cmd)
+            if (result.exitCode != 0) {
+                throw IOException("Shizuku 命令执行失败 [${result.exitCode}]: ${result.output.trim()}")
+            }
         } else {
             val res = RootShell.execute(cmd)
             if (!res.isSuccess) {
@@ -163,7 +173,7 @@ object AgentController {
 
     fun execAndRead(cmd: String, useShizuku: Boolean): String {
         return if (useShizuku) {
-            ProcessDeadline.run(createCmdProcess(cmd, true)).output
+            runShizukuCommand(cmd).output
         } else {
             val result = RootShell.execute(cmd)
             if (result.exitCode == -1) throw IOException(result.output)
@@ -189,8 +199,9 @@ object AgentController {
         exec("chmod 644 $LIBSYS_PATH", useShizuku)
     }
 
-    fun buildAgentStartCommand(signaling: String, deviceId: String, iceServers: String): String {
+    fun buildAgentStartCommand(signaling: String, deviceId: String, iceServers: String, useShizuku: Boolean = false): String {
         val sb = StringBuilder()
+        val logPath = agentLogPath(useShizuku)
         // CGroup 脱壳保护
         sb.append("for cg in /sys/fs/cgroup /acct /dev/cpuset /dev/cpuctl; do ")
             .append("[ -f \"\$cg/cgroup.procs\" ] && echo \$\$ > \"\$cg/cgroup.procs\" 2>/dev/null || true; ")
@@ -203,8 +214,16 @@ object AgentController {
             sb.append("export CP_AGENT_SIGNALING=${HostCommands.quote(sig)}; ")
         }
 
+        // 后台子进程的重定向失败不会反映在父 Shell 退出码中，先同步检查日志可写。
+        // 在子 Shell 中检查，避免重定向错误终止常驻 Root Shell。
+        sb.append("(: >> $logPath) && ")
         // double-fork + setsid + nohup 切断管道绑定
         sb.append("(setsid nohup env GODEBUG=asyncpreemptoff=1 $AGENT_BIN_PATH ")
+        // v0.4.1 等旧 Agent 只有显式传 -root 才会把 CoreService 降权到 shell；新版仍兼容此参数。
+        // Root Shell 启动 Go Agent 不代表 Java 核心也应以 UID 0 运行。
+        if (!useShizuku) {
+            sb.append("-root ")
+        }
         if (sig.isNotEmpty()) {
             sb.append("-signaling ${HostCommands.quote(sig)} ")
         }
@@ -216,13 +235,13 @@ object AgentController {
         if (ice.isNotEmpty()) {
             sb.append("-ice-servers ${HostCommands.quote(ice)} ")
         }
-        sb.append("< /dev/null >> $AGENT_LOG_PATH 2>&1 &)")
+        sb.append("< /dev/null >> $logPath 2>&1 &)")
         return sb.toString()
     }
 
     fun startAgent(context: Context, useShizuku: Boolean, signaling: String, deviceId: String, iceServers: String) {
         deployBinaries(context, useShizuku)
-        val cmd = buildAgentStartCommand(signaling, deviceId, iceServers)
+        val cmd = buildAgentStartCommand(signaling, deviceId, iceServers, useShizuku)
         Log.i(TAG, "Starting host agent")
         exec(cmd, useShizuku)
     }
@@ -251,11 +270,15 @@ object AgentController {
     }
 
     fun readLogsTail(useShizuku: Boolean): String {
+        val logPath = agentLogPath(useShizuku)
         return try {
-            val tail = execAndRead("tail -n 40 $AGENT_LOG_PATH", useShizuku)
+            val tail = execAndRead(
+                "if [ -f $logPath ]; then tail -n 40 $logPath; else printf '暂无日志内容 (尚未生成日志文件)'; fi",
+                useShizuku
+            )
             if (tail.trim().isNotEmpty()) return tail
 
-            val full = execAndRead("cat $AGENT_LOG_PATH", useShizuku)
+            val full = execAndRead("cat $logPath", useShizuku)
             if (full.trim().isEmpty()) return "暂无日志内容 (日志文件为空)"
 
             val lines = full.split("\n")
