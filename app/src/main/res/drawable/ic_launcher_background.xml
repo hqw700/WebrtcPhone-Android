@@ -1,21 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 彩色圆角底板：青蓝→紫渐变（呼应霓虹配色），自适应图标按启动器形状裁切。 -->
+<!-- 白色底板，自适应图标按启动器形状裁切 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M0,0h108v108h-108z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="6" android:startY="0"
-                android:endX="102" android:endY="108">
-                <item android:offset="0" android:color="#FF2CC8FF" />
-                <item android:offset="0.5" android:color="#FF5B8BFF" />
-                <item android:offset="1" android:color="#FF9A5BFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M0,0h108v108h-108z" />
 </vector>

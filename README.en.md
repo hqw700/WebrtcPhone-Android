@@ -1,12 +1,22 @@
-# WebrtcPhone-Android (ScrcpyOverWebRTC Mobile Client)
+<p align="center">
+  <a href="https://github.com/hqw700/WebrtcPhone-Android">
+    <img src="logo.svg" width="128" height="128" alt="WebrtcPhone Logo" />
+  </a>
+</p>
 
-[![Android CI](https://github.com/hqw700/WebrtcPhone-Android/actions/workflows/build.yml/badge.svg)](https://github.com/hqw700/WebrtcPhone-Android/actions/workflows/build.yml)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-blue.svg)](https://kotlinlang.org)
-[![Android SDK](https://img.shields.io/badge/minSdk-24%20%7C%20compileSdk-35-brightgreen.svg)](https://developer.android.com)
-[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-2024.12.01-purple.svg)](https://developer.android.com/jetpack/compose)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+<h1 align="center">WebrtcPhone-Android (ScrcpyOverWebRTC Mobile Client)</h1>
 
-[中文](README.md) | English
+<p align="center">
+  <a href="https://github.com/hqw700/WebrtcPhone-Android/actions/workflows/build.yml"><img src="https://github.com/hqw700/WebrtcPhone-Android/actions/workflows/build.yml/badge.svg" alt="Android CI" /></a>
+  <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.0.21-blue.svg" alt="Kotlin" /></a>
+  <a href="https://developer.android.com"><img src="https://img.shields.io/badge/minSdk-24%20%7C%20compileSdk-35-brightgreen.svg" alt="Android SDK" /></a>
+  <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Jetpack%20Compose-2024.12.01-purple.svg" alt="Jetpack Compose" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
+</p>
+
+<p align="center">
+  <a href="README.md">中文</a> | <b>English</b>
+</p>
 
 **WebrtcPhone-Android (穿云投屏)** is a modern native Android client engineered for high-performance cloud phone and physical Android device fleet management, powered by WebRTC and a customized `scrcpy-server` agent.
 
