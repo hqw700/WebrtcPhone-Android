@@ -7,23 +7,40 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.webrtc_phone.android.rtc.channel.Keys
 import com.webrtc_phone.android.rtc.channel.TouchAction
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 
 class ProjectionAccessibilityService : AccessibilityService() {
     companion object {
+        private val connection = MutableStateFlow(false)
+        val connected = connection.asStateFlow()
         internal var active: ProjectionAccessibilityService? = null
             private set
     }
 
     override fun onServiceConnected() {
         active = this
+        connection.value = true
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
     override fun onInterrupt() = Unit
 
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        clearConnection()
+        return super.onUnbind(intent)
+    }
+
+    private fun clearConnection() {
+        if (active === this) {
+            active = null
+            connection.value = false
+        }
+    }
+
     override fun onDestroy() {
-        if (active === this) active = null
+        clearConnection()
         super.onDestroy()
     }
 }
@@ -42,7 +59,7 @@ internal class ProjectionGestures(private val displaySize: () -> Pair<Int, Int>)
         }
         val input = runCatching { JSONObject(text) }.getOrNull() ?: return
         when (input.optString("type")) {
-            "touch" -> touch(service, input)
+            "", "touch" -> if (input.has("action") && input.has("x") && input.has("y")) touch(service, input)
             "inject_keycode" -> if (input.optInt("action", -1) == 1) {
                 navigation(input.optInt("keycode"))
             }

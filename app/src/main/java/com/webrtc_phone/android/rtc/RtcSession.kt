@@ -43,6 +43,7 @@ import java.util.concurrent.TimeUnit
 sealed interface ConnectionPhase {
     data object Signaling : ConnectionPhase
     data object WaitingOffer : ConnectionPhase
+    data object WaitingProjection : ConnectionPhase
     data object Negotiating : ConnectionPhase
     data object Connected : ConnectionPhase
     /** ICE 瞬断，等待自愈 */
@@ -242,6 +243,30 @@ class RtcSession(
                 val info = Parsers.deviceInfo(msg.info)
                 _deviceInfo.value = info
                 info.primaryDisplay?.let { d -> if (_videoSize.value == null) _videoSize.value = d.width to d.height }
+            }
+            is SignalingMessage.ProjectionStatus -> {
+                if (msg.state == "waiting") {
+                    if (_phase.value != ConnectionPhase.WaitingProjection) {
+                        _phase.value = ConnectionPhase.WaitingProjection
+                        timeoutTask?.cancel(false)
+                        timeoutTask = executor.schedule({
+                            if (!closed && _phase.value != ConnectionPhase.Connected) {
+                                fail("等待手机确认超时，请重新发起请求", retryable = false)
+                            }
+                        }, 85, TimeUnit.SECONDS)
+                    }
+                } else {
+                    val message = when (msg.state) {
+                        "rejected" -> "手机用户未同意共享屏幕"
+                        "expired" -> "投屏请求已超时，请重试"
+                        "busy" -> "手机正在处理其他协助请求"
+                        "unattended_denied" -> "亮屏无人值守仅允许有设备权限的管理台账号连接"
+                        "ended" -> "屏幕共享已结束，可重新请求"
+                        "failed" -> "手机未能启动共享，请重试"
+                        else -> return
+                    }
+                    fail(message, retryable = false)
+                }
             }
             is SignalingMessage.Offer -> onRemoteOffer(msg.sdp)
             is SignalingMessage.Answer -> pc?.setRemoteDescription(

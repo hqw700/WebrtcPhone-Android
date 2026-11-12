@@ -49,6 +49,15 @@
             android:windowSoftInputMode="adjustNothing|stateHidden" />
 
         <service
+            android:name=".host.ProjectionStandbyService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled remote assistance standby and incoming request notifications" />
+        </service>
+
+        <service
             android:name=".host.ProjectionHostService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />

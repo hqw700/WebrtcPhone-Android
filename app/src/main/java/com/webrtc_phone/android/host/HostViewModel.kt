@@ -1,7 +1,6 @@
 package com.webrtc_phone.android.host
 
 import android.app.Application
-import android.content.Intent
 import com.webrtc_phone.android.core.net.ServerEndpoint
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
@@ -59,7 +58,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         refreshState()
         startPolling()
         viewModelScope.launch {
-            ProjectionHostService.state.collect {
+            ProjectionStandbyService.state.collect {
                 if (_state.value.prefs.runMode == RunMode.PROJECTION) pollInternal()
             }
         }
@@ -78,7 +77,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     private fun pollInternal() {
         val app = getApplication<Application>()
         if (_state.value.prefs.runMode == RunMode.PROJECTION) {
-            val projection = ProjectionHostService.state.value
+            val projection = ProjectionStandbyService.state.value
             _state.update {
                 if (it.prefs.runMode != RunMode.PROJECTION) it else it.copy(
                     status = when {
@@ -88,7 +87,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     serviceRunning = projection.active,
                     agentPid = "",
-                    logs = projection.message.ifBlank { "请在本机启动并授权共享屏幕" }
+                    logs = projection.message.ifBlank { "开启在线待协助后，可从管理台发起请求" }
                 )
             }
             return
@@ -131,7 +130,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updatePrefs(transform: (HostPreferences) -> HostPreferences) {
-        if (AgentHostService.isServiceRunning || ProjectionHostService.state.value.active || _state.value.isBusy) return
+        if (AgentHostService.isServiceRunning || ProjectionStandbyService.state.value.active || _state.value.isBusy) return
         val previous = _state.value.prefs
         val requested = transform(previous)
         val updated = requested.copy(autoStart = requested.autoStart && requested.runMode == RunMode.ROOT)
@@ -160,25 +159,18 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun prepareProjection(): Boolean {
-        if (_state.value.isBusy || AgentHostService.isServiceRunning || ProjectionHostService.state.value.active) return false
+    fun startProjectionStandby() {
+        if (_state.value.isBusy || AgentHostService.isServiceRunning || ProjectionStandbyService.state.value.active) return
         if (ServerEndpoint.parse(_state.value.prefs.signalingUrl) == null) {
             _state.update { it.copy(errorMessage = "请填写有效的信令服务器地址") }
-            return false
+            return
         }
-        _state.update { it.copy(isBusy = true, errorMessage = null) }
-        return true
-    }
-
-    fun onProjectionConsent(consent: Intent?) {
-        _state.update { it.copy(isBusy = false) }
-        if (consent != null && _state.value.prefs.runMode == RunMode.PROJECTION) {
-            ProjectionHostService.start(getApplication(), consent)
-        }
+        _state.update { it.copy(errorMessage = null) }
+        ProjectionStandbyService.start(getApplication())
     }
 
     fun startHost() {
-        if (_state.value.isBusy || _state.value.prefs.runMode == RunMode.PROJECTION || ProjectionHostService.state.value.active) return
+        if (_state.value.isBusy || _state.value.prefs.runMode == RunMode.PROJECTION || ProjectionStandbyService.state.value.active) return
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
             val app = getApplication<Application>()
@@ -257,7 +249,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     fun stopHost() {
         if (_state.value.isBusy) return
         if (_state.value.prefs.runMode == RunMode.PROJECTION) {
-            ProjectionHostService.stop(getApplication())
+            ProjectionStandbyService.stop(getApplication())
             return
         }
         viewModelScope.launch(Dispatchers.IO) {

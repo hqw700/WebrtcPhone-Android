@@ -1,9 +1,11 @@
 package com.webrtc_phone.android.host
 
+import android.Manifest
 import android.app.Activity
-import android.content.Intent
 import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
+import android.content.pm.PackageManager
+import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -66,6 +68,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -93,9 +98,60 @@ fun HostScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val projectionConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        vm.onProjectionConsent(result.data.takeIf { result.resultCode == Activity.RESULT_OK })
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        vm.startProjectionStandby()
     }
+    val touchReady by ProjectionAccessibilityService.connected.collectAsStateWithLifecycle()
+    val standby by ProjectionStandbyService.state.collectAsStateWithLifecycle()
+    var confirmUnattended by rememberSaveable { mutableStateOf(false) }
+    var unattendedTicket by rememberSaveable { mutableStateOf<String?>(null) }
+    val unattendedConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val ticket = unattendedTicket
+        unattendedTicket = null
+        if (ticket != null) {
+            val data = result.data
+            if (result.resultCode == Activity.RESULT_OK && data != null) {
+                ProjectionHostService.start(context, ticket, data)
+            } else {
+                ProjectionStandbyService.reject(ticket)
+            }
+        }
+    }
+
+    if (confirmUnattended) {
+        AlertDialog(
+            onDismissRequest = { confirmUnattended = false },
+            title = { Text("开启亮屏无人值守") },
+            text = {
+                Text("开启后，有设备访问权限的管理台账号可以直接查看屏幕。已开启无障碍服务时也可以远程触控。请保持手机亮屏并解锁。锁屏、重启或结束共享后，需要在手机上重新开启。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmUnattended = false
+                    val ticket = ProjectionStandbyService.signaling?.reserveUnattended()
+                    if (ticket == null) {
+                        Toast.makeText(context, "请使用 WSS 上线，并先结束当前协助或待确认请求", Toast.LENGTH_SHORT).show()
+                    } else {
+                        unattendedTicket = ticket
+                        runCatching {
+                            val manager = context.getSystemService(MediaProjectionManager::class.java)
+                            val intent = if (Build.VERSION.SDK_INT >= 34) {
+                                manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+                            } else {
+                                manager.createScreenCaptureIntent()
+                            }
+                            unattendedConsent.launch(intent)
+                        }.onFailure {
+                            unattendedTicket = null
+                            ProjectionStandbyService.reject(ticket)
+                        }
+                    }
+                }) { Text("开启并授权录屏") }
+            },
+            dismissButton = { TextButton(onClick = { confirmUnattended = false }) { Text("取消") } }
+        )
+    }
+
 
     LaunchedEffect(state.toastMessage) {
         state.toastMessage?.let {
@@ -182,14 +238,12 @@ fun HostScreen(
                             vm.stopHost()
                         } else if (state.prefs.runMode != RunMode.PROJECTION) {
                             vm.startHost()
-                        } else if (vm.prepareProjection()) {
-                            val manager = context.getSystemService(MediaProjectionManager::class.java)
-                            val consent = if (Build.VERSION.SDK_INT >= 34) {
-                                manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
-                            } else {
-                                manager.createScreenCaptureIntent()
-                            }
-                            projectionConsent.launch(consent)
+                        } else if (Build.VERSION.SDK_INT >= 33 &&
+                            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            vm.startProjectionStandby()
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -215,7 +269,9 @@ fun HostScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (isRunning) "停止受控端 (Stop Agent)" else "启动受控端 (Start Agent)",
+                            if (state.prefs.runMode == RunMode.PROJECTION) {
+                                if (isRunning) "停止在线待协助" else "开启在线待协助"
+                            } else if (isRunning) "停止受控端 (Stop Agent)" else "启动受控端 (Start Agent)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -317,7 +373,7 @@ fun HostScreen(
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when (state.prefs.runMode) {
-                            RunMode.PROJECTION -> "每次启动时在本机确认共享整屏。开启无障碍服务可接收远程触控。"
+                            RunMode.PROJECTION -> "开启后在管理台显示在线。收到请求后在本机确认共享，锁屏结束共享后会回到待命。"
                             RunMode.ROOT -> "Root 模式：利用常驻 su 会话调用，需要设备已刷入 Magisk / KernelSU / APatch。"
                             RunMode.SHIZUKU -> "Shizuku 模式：通过 ADB 无线调试或已启动的 Shizuku 服务运行，无需解锁 Root。"
                         },
@@ -344,8 +400,22 @@ fun HostScreen(
                     onChange = { vm.updatePrefs { p -> p.copy(autoStart = it) } }
                 )
                 if (state.prefs.runMode == RunMode.PROJECTION) {
-                    TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
-                        Text("打开无障碍设置")
+                    TextButton(
+                        enabled = standby.unattended || (standby.online && unattendedTicket == null),
+                        onClick = {
+                            if (standby.unattended) ProjectionHostService.stop(context)
+                            else confirmUnattended = true
+                        }
+                    ) {
+                        Text(if (standby.unattended) "结束亮屏无人值守" else "开启亮屏无人值守")
+                    }
+                    FlowRow {
+                        TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
+                            Text(if (touchReady) "远程触控已开启" else "开启远程触控")
+                        }
+                        TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_DISPLAY_SETTINGS)) }) {
+                            Text("调整自动灭屏时间")
+                        }
                     }
                 } else SwitchRow(
                     title = "前台常驻与防休眠",
@@ -439,7 +509,7 @@ private fun HostStatusBanner(state: HostUiState) {
                     Spacer(Modifier.width(10.dp))
                     Text(
                         when (state.status) {
-                            HostStatus.RUNNING -> "正在受控运行中"
+                            HostStatus.RUNNING -> if (state.prefs.runMode == RunMode.PROJECTION) "已上线" else "正在受控运行中"
                             HostStatus.STARTING -> "正在启动中..."
                             HostStatus.STOPPED -> "未运行 (已停止)"
                         },

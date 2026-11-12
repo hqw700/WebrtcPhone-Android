@@ -68,6 +68,7 @@ fun ConnectingOverlay(phase: ConnectionPhase, retry: Int, deviceName: String, on
                 (if (retry > 0) "第 $retry 次重连 · " else "") + when (phase) {
                     ConnectionPhase.Signaling -> "连接服务器…"
                     ConnectionPhase.WaitingOffer -> "等待设备响应…"
+                    ConnectionPhase.WaitingProjection -> "等待手机用户确认共享屏幕…"
                     ConnectionPhase.Negotiating -> "建立加密通道…"
                     ConnectionPhase.Connected -> "等待首帧画面…"
                     else -> "连接中…"

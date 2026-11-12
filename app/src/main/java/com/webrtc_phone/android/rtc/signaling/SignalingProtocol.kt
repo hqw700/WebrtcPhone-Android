@@ -11,6 +11,7 @@ data class CandidateSpec(val sdpMid: String?, val sdpMLineIndex: Int, val candid
 sealed interface SignalingMessage {
     data class Config(val iceServers: List<IceServerSpec>) : SignalingMessage
     data class DeviceInfo(val info: JSONObject) : SignalingMessage
+    data class ProjectionStatus(val state: String) : SignalingMessage
     data class Offer(val sdp: String) : SignalingMessage
     data class Answer(val sdp: String) : SignalingMessage
     data class Candidate(val candidate: CandidateSpec) : SignalingMessage
@@ -41,6 +42,7 @@ object SignalingProtocol {
     }
 
     private fun parsePayload(p: JSONObject): SignalingMessage? = when (p.optString("type")) {
+        "projection_status" -> SignalingMessage.ProjectionStatus(p.optString("state"))
         "offer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Offer(it) }
         "answer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Answer(it) }
         "ice-candidate" -> {

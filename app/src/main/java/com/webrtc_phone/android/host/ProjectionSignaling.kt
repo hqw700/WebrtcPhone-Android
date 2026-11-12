@@ -3,7 +3,9 @@ package com.webrtc_phone.android.host
 import android.os.Build
 import android.os.Handler
 import com.webrtc_phone.android.BuildConfig
+import com.webrtc_phone.android.core.net.ApiException
 import com.webrtc_phone.android.core.net.ServerEndpoint
+import com.webrtc_phone.android.core.net.UntrustedCertificateInfo
 import com.webrtc_phone.android.rtc.channel.Keys
 import com.webrtc_phone.android.rtc.channel.SafeChannel
 import okhttp3.OkHttpClient
@@ -24,6 +26,7 @@ import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.VideoTrack
+import java.util.UUID
 import java.util.concurrent.Executor
 
 /** WebSocket、PeerConnection 和手势状态统一在服务线程上更新。 */
@@ -31,15 +34,41 @@ internal class ProjectionSignaling(
     private val http: OkHttpClient,
     private val endpoint: ServerEndpoint,
     private val prefs: HostPreferences,
-    private val factory: PeerConnectionFactory,
-    private val video: VideoTrack,
     private val handler: Handler,
     private val displaySize: () -> Pair<Int, Int>,
-    private val fullDisplay: () -> Boolean,
     private val status: (Boolean, String) -> Unit,
+    private val publishRequest: (ProjectionStandbyService.Request?) -> Unit,
+    private val stopCapture: () -> Unit,
+    private val confirmCertificate: (UntrustedCertificateInfo) -> Unit,
     private val fatal: (String) -> Unit,
 ) {
-    private val peers = mutableMapOf<Long, Peer>()
+    private data class Invitation(
+        val clientId: Long,
+        val ticket: String,
+        val control: Boolean,
+        val owner: String,
+        val resumeKey: String,
+    ) {
+        val canResume get() = owner.isNotBlank() && resumeKey.isNotBlank()
+    }
+
+    private data class Capture(
+        val ticket: String,
+        val unattended: Boolean,
+        val factory: PeerConnectionFactory,
+        val video: VideoTrack,
+        val fullDisplay: () -> Boolean,
+    )
+    private var invitation: Invitation? = null
+    private var sharing: Invitation? = null
+    private var peer: Peer? = null
+    private var capture: Capture? = null
+    private var unattendedTicket: String? = null
+    val unattended get() = capture?.unattended == true
+    private val trustedSignaling = endpoint.secure || endpoint.host in setOf("localhost", "127.0.0.1", "::1")
+    private val expire = Runnable {
+        invitation?.let { reject(it.ticket, "expired") }
+    }
     private var socket: WebSocket? = null
     private var registered = false
     private var closed = false
@@ -76,7 +105,16 @@ internal class ProjectionSignaling(
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     handler.post {
                         if (socket !== webSocket) return@post
+                        val untrusted = ApiException.from(t) as? ApiException.UntrustedCertificate
                         when {
+                            untrusted != null -> {
+                                disconnect()
+                                if (untrusted.info.notAfter <= System.currentTimeMillis()) {
+                                    fatal("信令服务器证书已过期，请联系管理员更新证书")
+                                } else {
+                                    confirmCertificate(untrusted.info)
+                                }
+                            }
                             response?.code in listOf(401, 403) -> fatal("信令服务器拒绝设备注册（HTTP ${response?.code}）")
                             t is javax.net.ssl.SSLException -> fatal("无法验证信令服务器证书，请检查服务器地址和证书")
                             else -> reconnect(webSocket, "信令连接失败，正在重连")
@@ -95,7 +133,8 @@ internal class ProjectionSignaling(
         val info = JSONObject().put("model", Build.MODEL).put("brand", Build.MANUFACTURER)
             .put("android_version", Build.VERSION.RELEASE).put("sdk_int", Build.VERSION.SDK_INT)
             .put("camera_support", false).put("displays", JSONArray().put(display))
-            .put("agent_version", BuildConfig.VERSION_NAME)
+            .put("agent_version", BuildConfig.VERSION_NAME).put("app_version", BuildConfig.VERSION_NAME)
+            .put("projection_on_demand", true)
         send(JSONObject().put("type", "agent_register").put("device_id", prefs.deviceId)
             .put("is_webrtc", true).put("device_info", info).put("ice_servers", prefs.iceServers))
     }
@@ -108,10 +147,13 @@ internal class ProjectionSignaling(
                 handler.removeCallbacks(registrationTimeout)
                 handler.removeCallbacks(heartbeat)
                 heartbeat.run()
-                status(true, "正在共享屏幕")
+                status(true, if (unattended) "亮屏无人值守 · 等待连接" else "在线 · 可请求投屏")
             }
             "error" -> fatal(message.optString("reason").ifBlank { message.optString("error", "信令服务器拒绝注册") })
-            "client_disconnected" -> peers.remove(id)?.close()
+            "client_disconnected" -> {
+                if (invitation?.clientId == id) clearInvitation()
+                if (sharing?.clientId == id) detachPeer("ended")
+            }
             "command" -> {
                 // 旧网页导航按钮走 command。仅映射这三个固定值到系统导航动作。
                 val keycode = when (message.optString("command")) {
@@ -120,7 +162,7 @@ internal class ProjectionSignaling(
                     "input keyevent 187" -> Keys.APP_SWITCH
                     else -> return
                 }
-                peers[id]?.navigation(keycode)
+                peer?.takeIf { sharing?.clientId == id }?.navigation(keycode)
             }
             "forward" -> {
                 if (!registered || id <= 0) return
@@ -129,16 +171,55 @@ internal class ProjectionSignaling(
                     "request-offer" -> {
                         val options = payload.optJSONObject("scrcpy_options")
                         if (options?.optString("video_source") == "camera" || options?.optBoolean("video", true) == false) return
-                        peers.remove(id)?.close()
-                        if (peers.size >= 4) return
-                        val control = message.optBoolean("projection_input_allowed") &&
-                            (endpoint.secure || endpoint.host in setOf("localhost", "127.0.0.1", "::1"))
-                        val peer = Peer(id, control)
-                        peers[id] = peer
-                        runCatching { peer.start() }.onFailure { peer.fail() }
+                        val control = trustedSignaling && message.optBoolean("projection_input_allowed")
+                        val owner = message.optString("projection_owner").takeIf { trustedSignaling }.orEmpty()
+                        val resumeKey = payload.optString("projection_resume_key")
+                            .takeIf { it.length == 32 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }.orEmpty()
+                        val allowUnattended = trustedSignaling && owner.isNotBlank() &&
+                            message.optBoolean("projection_unattended_allowed")
+                        if (unattended && !allowUnattended) {
+                            sendStatus(id, "unattended_denied")
+                            return
+                        }
+                        val active = sharing
+                        if (active != null) {
+                            if (active.canResume && active.owner == owner && active.resumeKey == resumeKey) {
+                                attachPeer(active.copy(clientId = id, control = active.control && control))
+                            } else if (active.clientId != id) {
+                                sendStatus(id, "busy")
+                            }
+                            return
+                        }
+                        if (unattended) {
+                            val source = checkNotNull(capture)
+                            attachPeer(Invitation(id, source.ticket, control, owner, resumeKey))
+                            return
+                        }
+                        if (unattendedTicket != null) {
+                            sendStatus(id, "busy")
+                            return
+                        }
+                        if (invitation != null) {
+                            sendStatus(id, if (invitation?.clientId == id) "waiting" else "busy")
+                            return
+                        }
+                        val ticket = UUID.randomUUID().toString()
+                        invitation = Invitation(id, ticket, control, owner, resumeKey)
+                        val requester = message.optString("projection_requester").take(120).ifBlank { "管理台用户" }
+                        publishRequest(ProjectionStandbyService.Request(ticket, requester, control))
+                        sendStatus(id, "waiting")
+                        handler.postDelayed(expire, 60_000)
                     }
-                    "answer" -> peers[id]?.answer(payload.optString("sdp"))
-                    "ice-candidate" -> payload.optJSONObject("candidate")?.let { peers[id]?.candidate(it) }
+                    "projection-end" -> {
+                        val active = sharing
+                        if (active != null && (active.clientId == id || (
+                                active.canResume && active.owner == message.optString("projection_owner") &&
+                                    active.resumeKey == payload.optString("projection_resume_key")
+                            ))) endShare("ended")
+                        if (invitation?.clientId == id) clearInvitation()
+                    }
+                    "answer" -> peer?.takeIf { sharing?.clientId == id }?.answer(payload.optString("sdp"))
+                    "ice-candidate" -> payload.optJSONObject("candidate")?.let { peer?.takeIf { sharing?.clientId == id }?.candidate(it) }
                 }
             }
         }
@@ -150,25 +231,122 @@ internal class ProjectionSignaling(
 
     private fun reconnect(connection: WebSocket, message: String) {
         if (socket !== connection || closed) return
-        disconnect()
+        disconnect(keepUnattended = true)
         status(false, message)
         handler.postDelayed(retry, 3_000)
     }
 
     fun resetGestures() {
-        peers.values.forEach { it.gestures.reset() }
+        peer?.gestures?.reset()
     }
 
-    private fun disconnect() {
+    fun reserveUnattended(): String? {
+        if (!trustedSignaling || !registered || capture != null || invitation != null || unattendedTicket != null) return null
+        return UUID.randomUUID().toString().also { unattendedTicket = it }
+    }
+
+    fun isUnattendedRequest(ticket: String): Boolean = unattendedTicket == ticket
+
+    fun isPending(ticket: String): Boolean =
+        registered && (invitation?.ticket == ticket || isUnattendedRequest(ticket))
+
+    fun reject(ticket: String, reason: String = "rejected") {
+        if (isUnattendedRequest(ticket)) {
+            unattendedTicket = null
+            status(registered, if (reason == "failed") "无法开启亮屏无人值守" else "已取消亮屏无人值守")
+            return
+        }
+        val request = invitation?.takeIf { it.ticket == ticket } ?: return
+        clearInvitation()
+        sendStatus(request.clientId, reason)
+    }
+
+    private fun clearInvitation() {
+        invitation = null
+        handler.removeCallbacks(expire)
+        publishRequest(null)
+    }
+
+    fun startShare(ticket: String, factory: PeerConnectionFactory, video: VideoTrack, fullDisplay: () -> Boolean): Boolean {
+        if (!isPending(ticket)) return false
+        if (isUnattendedRequest(ticket)) {
+            unattendedTicket = null
+            capture = Capture(ticket, true, factory, video, fullDisplay)
+            status(true, "亮屏无人值守 · 等待连接")
+        } else {
+            val request = invitation ?: return false
+            clearInvitation()
+            capture = Capture(ticket, false, factory, video, fullDisplay)
+            attachPeer(request)
+        }
+        return capture?.ticket == ticket
+    }
+
+    private fun attachPeer(request: Invitation) {
+        val source = capture ?: return
+        closePeer()
+        sharing = request
+        val connection = Peer(request.clientId, request.control, source.factory, source.video, source.fullDisplay)
+        peer = connection
+        status(true, "正在共享屏幕")
+        runCatching { connection.start() }.onFailure { connection.fail() }
+    }
+
+    private fun closePeer() {
+        val old = peer
+        peer = null
+        old?.close()
+    }
+
+    private fun detachPeer(reason: String) {
+        val request = sharing ?: return
+        if (!unattended && !request.canResume) {
+            endShare(reason)
+            return
+        }
+        if (peer == null) return
+        closePeer()
+        if (reason == "failed") sendStatus(request.clientId, reason)
+        if (unattended) sharing = null
+        status(true, if (unattended) "亮屏无人值守 · 等待连接" else "连接已断开，等待管理台重连")
+    }
+
+    fun captureEnded(ticket: String, message: String) {
+        if (capture?.ticket == ticket) endShare("ended", message)
+        else reject(ticket, "failed")
+    }
+
+    private fun endShare(reason: String, message: String = "共享已结束") {
+        if (capture == null) return
+        val request = sharing
+        sharing = null
+        capture = null
+        closePeer()
+        if (registered) request?.let { sendStatus(it.clientId, reason) }
+        status(registered, if (registered) "$message · 在线待命" else message)
+        stopCapture()
+    }
+
+    private fun sendStatus(id: Long, state: String) {
+        send(JSONObject().put("type", "forward").put("client_id", id)
+            .put("payload", JSONObject().put("type", "projection_status").put("state", state)))
+    }
+
+    private fun disconnect(keepUnattended: Boolean = false) {
         val old = socket
         socket = null
         registered = false
         old?.cancel()
         handler.removeCallbacks(heartbeat)
         handler.removeCallbacks(registrationTimeout)
-        val oldPeers = peers.values.toList()
-        peers.clear()
-        oldPeers.forEach { it.close() }
+        clearInvitation()
+        unattendedTicket = null
+        if (keepUnattended && unattended) {
+            sharing = null
+            closePeer()
+        } else {
+            endShare("ended")
+        }
     }
 
     fun close() {
@@ -194,7 +372,13 @@ internal class ProjectionSignaling(
         }
     }
 
-    private inner class Peer(private val id: Long, private val control: Boolean) : PeerConnection.Observer {
+    private inner class Peer(
+        private val id: Long,
+        private val control: Boolean,
+        private val factory: PeerConnectionFactory,
+        private val video: VideoTrack,
+        private val fullDisplay: () -> Boolean,
+    ) : PeerConnection.Observer {
         val gestures = ProjectionGestures(displaySize)
         private var pc: PeerConnection? = null
         private var channel: SafeChannel? = null
@@ -225,7 +409,7 @@ internal class ProjectionSignaling(
                 channel = SafeChannel(raw, Executor { handler.post(it) }).also {
                     it.observe(object : SafeChannel.Listener {
                         override fun onMessage(data: ByteArray, binary: Boolean) {
-                            if (!binary && data.size <= 2048 && peers[id] === this@Peer && fullDisplay()) {
+                            if (!binary && data.size <= 2048 && peer === this@Peer && fullDisplay()) {
                                 gestures.receive(data.toString(Charsets.UTF_8))
                             }
                         }
@@ -279,7 +463,7 @@ internal class ProjectionSignaling(
         }
 
         private fun post(block: () -> Unit) {
-            handler.post { if (peers[id] === this) block() }
+            handler.post { if (peer === this) block() }
         }
 
         private fun observer(
@@ -293,9 +477,7 @@ internal class ProjectionSignaling(
         }
 
         fun fail() {
-            if (peers[id] !== this) return
-            peers.remove(id)
-            close()
+            if (peer === this) detachPeer("failed")
         }
 
         fun close() {

@@ -89,7 +89,7 @@ class AgentHostService : Service {
 
         if (isServiceRunning || stopping) return START_STICKY
         val prefs = HostConfig.load(this)
-        if (prefs.runMode == RunMode.PROJECTION || ProjectionHostService.state.value.active) {
+        if (prefs.runMode == RunMode.PROJECTION || ProjectionStandbyService.state.value.active) {
             stopSelf()
             return START_NOT_STICKY
         }

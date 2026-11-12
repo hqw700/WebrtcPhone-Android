@@ -2,6 +2,7 @@ package com.webrtc_phone.android.ui
 
 import android.app.Application
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -13,6 +14,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,6 +31,8 @@ import com.webrtc_phone.android.container
 import com.webrtc_phone.android.data.model.AuthSession
 import com.webrtc_phone.android.host.HostScreen
 import com.webrtc_phone.android.host.HostViewModel
+import com.webrtc_phone.android.host.ProjectionRequestDialog
+import com.webrtc_phone.android.host.ProjectionStandbyService
 import com.webrtc_phone.android.ui.home.HomeScreen
 import com.webrtc_phone.android.ui.home.HomeViewModel
 import com.webrtc_phone.android.ui.home.Routes
@@ -58,9 +62,17 @@ class MainActivity : ComponentActivity() {
         val c = container
         setContent {
             val app by c.settings.app.collectAsStateWithLifecycle()
+            val standby by ProjectionStandbyService.state.collectAsStateWithLifecycle()
+            DisposableEffect(standby.unattended) {
+                val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                val added = standby.unattended && (window.attributes.flags and flag) == 0
+                if (added) window.addFlags(flag)
+                onDispose { if (added) window.clearFlags(flag) }
+            }
             WebrtcPhoneTheme(app.themeMode) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Root(c)
+                    ProjectionRequestDialog()
                 }
             }
         }
