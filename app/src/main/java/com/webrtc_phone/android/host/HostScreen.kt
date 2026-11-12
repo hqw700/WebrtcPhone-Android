@@ -1,5 +1,13 @@
 package com.webrtc_phone.android.host
 
+import android.app.Activity
+import android.content.Intent
+import android.media.projection.MediaProjectionConfig
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -85,6 +93,9 @@ fun HostScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val projectionConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        vm.onProjectionConsent(result.data.takeIf { result.resultCode == Activity.RESULT_OK })
+    }
 
     LaunchedEffect(state.toastMessage) {
         state.toastMessage?.let {
@@ -135,7 +146,7 @@ fun HostScreen(
                 .padding(bottom = 32.dp)
         ) {
             // 缺失资产警告
-            if (!state.hasAssets) {
+            if (!state.hasAssets && state.prefs.runMode != RunMode.PROJECTION) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -167,7 +178,19 @@ fun HostScreen(
                 val isRunning = state.status == HostStatus.RUNNING || state.serviceRunning
                 Button(
                     onClick = {
-                        if (isRunning) vm.stopHost() else vm.startHost()
+                        if (isRunning) {
+                            vm.stopHost()
+                        } else if (state.prefs.runMode != RunMode.PROJECTION) {
+                            vm.startHost()
+                        } else if (vm.prepareProjection()) {
+                            val manager = context.getSystemService(MediaProjectionManager::class.java)
+                            val consent = if (Build.VERSION.SDK_INT >= 34) {
+                                manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+                            } else {
+                                manager.createScreenCaptureIntent()
+                            }
+                            projectionConsent.launch(consent)
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp),
                     shape = MaterialTheme.shapes.large,
@@ -256,7 +279,7 @@ fun HostScreen(
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text("选择执行引擎", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         FilterChip(
                             enabled = !state.serviceRunning && !state.isBusy,
                             selected = state.prefs.runMode == RunMode.ROOT,
@@ -283,11 +306,18 @@ fun HostScreen(
                                 selectedLabelColor = AppColors.Brand
                             )
                         )
+                        FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            selected = state.prefs.runMode == RunMode.PROJECTION,
+                            onClick = { vm.updatePrefs { it.copy(runMode = RunMode.PROJECTION) } },
+                            label = { Text("系统录屏（免 ADB / Root）") }
+                        )
                     }
 
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when (state.prefs.runMode) {
+                            RunMode.PROJECTION -> "每次启动时在本机确认共享整屏。开启无障碍服务可接收远程触控。"
                             RunMode.ROOT -> "Root 模式：利用常驻 su 会话调用，需要设备已刷入 Magisk / KernelSU / APatch。"
                             RunMode.SHIZUKU -> "Shizuku 模式：通过 ADB 无线调试或已启动的 Shizuku 服务运行，无需解锁 Root。"
                         },
@@ -313,7 +343,11 @@ fun HostScreen(
                     checked = state.prefs.autoStart,
                     onChange = { vm.updatePrefs { p -> p.copy(autoStart = it) } }
                 )
-                SwitchRow(
+                if (state.prefs.runMode == RunMode.PROJECTION) {
+                    TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
+                        Text("打开无障碍设置")
+                    }
+                } else SwitchRow(
                     title = "前台常驻与防休眠",
                     enabled = !state.serviceRunning && !state.isBusy,
                     subtitle = "显示常驻状态通知并持有 WakeLock，防止手机灭屏时被系统休眠杀死",
@@ -419,6 +453,10 @@ private fun HostStatusBanner(state: HostUiState) {
                 }
             }
 
+            if (state.prefs.runMode == RunMode.PROJECTION && state.logs.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(state.logs, style = MaterialTheme.typography.bodySmall)
+            }
             Spacer(Modifier.height(14.dp))
 
             FlowRow(
@@ -429,6 +467,7 @@ private fun HostStatusBanner(state: HostUiState) {
                 InfoChip("🌐 ${state.localIp}")
                 InfoChip("🤖 ${state.androidVersion}")
                 val engineDesc = when (state.prefs.runMode) {
+                    RunMode.PROJECTION -> "系统录屏"
                     RunMode.ROOT -> if (state.rootStatus == AgentController.RootStatus.GRANTED) "Root: 已授权" else "Root: 未授权"
                     RunMode.SHIZUKU -> when (state.shizukuStatus) {
                         AgentController.ShizukuStatus.RUNNING_AND_GRANTED -> "Shizuku: 已激活"

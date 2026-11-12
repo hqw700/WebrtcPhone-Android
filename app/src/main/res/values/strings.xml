@@ -3,4 +3,5 @@
     <string name="app_name">穿云投屏</string>
     <!-- 主页标题（与应用名一致，可独立调整） -->
     <string name="app_title">穿云投屏</string>
+    <string name="projection_accessibility_description">仅在 WebrtcPhone 正在共享整屏时，代为执行已授权控制端发送的触控和导航操作。</string>
 </resources>

@@ -7,11 +7,12 @@ import java.util.UUID
 
 enum class RunMode {
     ROOT,
-    SHIZUKU;
+    SHIZUKU,
+    PROJECTION;
 
     companion object {
         fun fromString(value: String?): RunMode {
-            return if ("shizuku".equals(value, ignoreCase = true)) SHIZUKU else ROOT
+            return entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: ROOT
         }
     }
 }
@@ -64,7 +65,7 @@ object HostConfig {
             .putString(KEY_SIGNALING, prefs.signalingUrl)
             .putString(KEY_DEVICE_ID, prefs.deviceId)
             .putString(KEY_ICE_SERVERS, prefs.iceServers)
-            .putString(KEY_RUN_MODE, if (prefs.runMode == RunMode.SHIZUKU) "shizuku" else "root")
+            .putString(KEY_RUN_MODE, prefs.runMode.name.lowercase())
             .putBoolean(KEY_AUTO_START, prefs.autoStart && prefs.runMode == RunMode.ROOT)
             .putBoolean(KEY_KEEP_ALIVE, prefs.keepAlive)
             .apply()

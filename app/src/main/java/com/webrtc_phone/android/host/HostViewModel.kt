@@ -1,6 +1,8 @@
 package com.webrtc_phone.android.host
 
 import android.app.Application
+import android.content.Intent
+import com.webrtc_phone.android.core.net.ServerEndpoint
 import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -56,6 +58,11 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     init {
         refreshState()
         startPolling()
+        viewModelScope.launch {
+            ProjectionHostService.state.collect {
+                if (_state.value.prefs.runMode == RunMode.PROJECTION) pollInternal()
+            }
+        }
     }
 
     private fun startPolling() {
@@ -70,9 +77,27 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun pollInternal() {
         val app = getApplication<Application>()
+        if (_state.value.prefs.runMode == RunMode.PROJECTION) {
+            val projection = ProjectionHostService.state.value
+            _state.update {
+                if (it.prefs.runMode != RunMode.PROJECTION) it else it.copy(
+                    status = when {
+                        projection.online -> HostStatus.RUNNING
+                        projection.active -> HostStatus.STARTING
+                        else -> HostStatus.STOPPED
+                    },
+                    serviceRunning = projection.active,
+                    agentPid = "",
+                    logs = projection.message.ifBlank { "请在本机启动并授权共享屏幕" }
+                )
+            }
+            return
+        }
         val useShizuku = _state.value.prefs.runMode == RunMode.SHIZUKU
-        val pid = AgentController.isAgentRunning(useShizuku)
-        val logs = AgentController.readLogsTail(useShizuku)
+        // 进入页面时只查询已建立的 Root 会话，避免切换系统录屏前弹出 su 授权。
+        val canQueryAgent = useShizuku || AgentHostService.isServiceRunning || AgentController.RootShell.isAlive()
+        val pid = if (canQueryAgent) AgentController.isAgentRunning(useShizuku) else ""
+        val logs = if (canQueryAgent) AgentController.readLogsTail(useShizuku) else "启动 Root 被控端后显示日志"
         val root = if (!useShizuku && AgentController.RootShell.isAlive()) {
             AgentController.checkRootStatus()
         } else _state.value.rootStatus
@@ -86,7 +111,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         _state.update {
-            it.copy(
+            if (it.prefs.runMode == RunMode.PROJECTION) it else it.copy(
                 status = newStatus,
                 agentPid = pid,
                 serviceRunning = AgentHostService.isServiceRunning,
@@ -106,11 +131,13 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updatePrefs(transform: (HostPreferences) -> HostPreferences) {
-        if (AgentHostService.isServiceRunning || _state.value.isBusy) return
-        val requested = transform(_state.value.prefs)
+        if (AgentHostService.isServiceRunning || ProjectionHostService.state.value.active || _state.value.isBusy) return
+        val previous = _state.value.prefs
+        val requested = transform(previous)
         val updated = requested.copy(autoStart = requested.autoStart && requested.runMode == RunMode.ROOT)
         HostConfig.save(getApplication(), updated)
         _state.update { it.copy(prefs = updated) }
+        if (updated.runMode != previous.runMode) refreshState()
     }
 
     fun fillSignalingUrl(url: String) {
@@ -133,8 +160,25 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun prepareProjection(): Boolean {
+        if (_state.value.isBusy || AgentHostService.isServiceRunning || ProjectionHostService.state.value.active) return false
+        if (ServerEndpoint.parse(_state.value.prefs.signalingUrl) == null) {
+            _state.update { it.copy(errorMessage = "请填写有效的信令服务器地址") }
+            return false
+        }
+        _state.update { it.copy(isBusy = true, errorMessage = null) }
+        return true
+    }
+
+    fun onProjectionConsent(consent: Intent?) {
+        _state.update { it.copy(isBusy = false) }
+        if (consent != null && _state.value.prefs.runMode == RunMode.PROJECTION) {
+            ProjectionHostService.start(getApplication(), consent)
+        }
+    }
+
     fun startHost() {
-        if (_state.value.isBusy) return
+        if (_state.value.isBusy || _state.value.prefs.runMode == RunMode.PROJECTION || ProjectionHostService.state.value.active) return
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
             val app = getApplication<Application>()
@@ -212,6 +256,10 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopHost() {
         if (_state.value.isBusy) return
+        if (_state.value.prefs.runMode == RunMode.PROJECTION) {
+            ProjectionHostService.stop(getApplication())
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isBusy = true) }
             val app = getApplication<Application>()
