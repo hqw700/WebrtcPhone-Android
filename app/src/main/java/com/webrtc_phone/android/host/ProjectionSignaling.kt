@@ -2,6 +2,7 @@ package com.webrtc_phone.android.host
 
 import android.os.Build
 import android.os.Handler
+import android.util.Log
 import com.webrtc_phone.android.BuildConfig
 import com.webrtc_phone.android.core.net.ApiException
 import com.webrtc_phone.android.core.net.ServerEndpoint
@@ -48,6 +49,7 @@ internal class ProjectionSignaling(
         val control: Boolean,
         val owner: String,
         val resumeKey: String,
+        val bitrate: VideoBitrate,
     ) {
         val canResume get() = owner.isNotBlank() && resumeKey.isNotBlank()
     }
@@ -187,10 +189,11 @@ internal class ProjectionSignaling(
                             sendStatus(id, "unattended_denied")
                             return
                         }
+                        val bitrate = VideoBitrate.from(options)
                         val active = sharing
                         if (active != null) {
                             if (active.canResume && active.owner == owner && active.resumeKey == resumeKey) {
-                                attachPeer(active.copy(clientId = id, control = active.control && control))
+                                attachPeer(active.copy(clientId = id, control = active.control && control, bitrate = bitrate))
                             } else if (active.clientId != id) {
                                 sendStatus(id, "busy")
                             }
@@ -198,7 +201,7 @@ internal class ProjectionSignaling(
                         }
                         if (unattended) {
                             val source = checkNotNull(capture)
-                            attachPeer(Invitation(id, source.ticket, control, owner, resumeKey))
+                            attachPeer(Invitation(id, source.ticket, control, owner, resumeKey, bitrate))
                             return
                         }
                         if (unattendedTicket != null) {
@@ -210,7 +213,7 @@ internal class ProjectionSignaling(
                             return
                         }
                         val ticket = UUID.randomUUID().toString()
-                        invitation = Invitation(id, ticket, control, owner, resumeKey)
+                        invitation = Invitation(id, ticket, control, owner, resumeKey, bitrate)
                         val requester = message.optString("projection_requester").take(120).ifBlank { "管理台用户" }
                         publishRequest(ProjectionStandbyService.Request(ticket, requester, control))
                         sendStatus(id, "waiting")
@@ -292,10 +295,13 @@ internal class ProjectionSignaling(
         val source = capture ?: return
         closePeer()
         sharing = request
-        val connection = Peer(request.clientId, request.control, source.factory, source.video, source.fullDisplay)
+        val connection = Peer(request.clientId, request.control, request.bitrate, source.factory, source.video, source.fullDisplay)
         peer = connection
         status(true, "正在共享屏幕")
-        runCatching { connection.start() }.onFailure { connection.fail() }
+        runCatching { connection.start() }.onFailure {
+            Log.w("ProjectionSignaling", "无法建立录屏视频发送端", it)
+            connection.fail()
+        }
     }
 
     private fun closePeer() {
@@ -381,6 +387,7 @@ internal class ProjectionSignaling(
     private inner class Peer(
         private val id: Long,
         private val control: Boolean,
+        private val bitrate: VideoBitrate,
         private val factory: PeerConnectionFactory,
         private val video: VideoTrack,
         private val fullDisplay: () -> Boolean,
@@ -406,6 +413,16 @@ internal class ProjectionSignaling(
                     RtpTransceiver.RtpTransceiverDirection.SEND_ONLY, listOf("projection")
                 )
             )
+            val sender = transceiver.sender
+            val parameters = sender.parameters
+            check(parameters.encodings.isNotEmpty()) { "录屏视频发送端没有编码参数" }
+            parameters.encodings.forEach { it.maxBitrateBps = bitrate.maxBps }
+            check(sender.setParameters(parameters)) { "无法设置录屏视频码率上限" }
+            // 码率范围用于拥塞控制，视频轨的上限独立限制编码器。
+            if (!connection.setBitrate(bitrate.minBps, bitrate.startBps, bitrate.maxBps)) {
+                Log.w("ProjectionSignaling", "无法设置录屏带宽估计范围，仍使用视频轨码率上限")
+            }
+            Log.i("ProjectionSignaling", "录屏码率 bps：min=${bitrate.minBps}, start=${bitrate.startBps}, max=${bitrate.maxBps}")
             val codecs = factory.getRtpSenderCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO).codecs
             if (codecs.any { it.mimeType.equals("video/H264", ignoreCase = true) }) {
                 transceiver.setCodecPreferences(codecs.sortedBy { !it.mimeType.equals("video/H264", ignoreCase = true) })
