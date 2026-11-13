@@ -103,7 +103,6 @@ fun HostScreen(
     }
     val touchReady by ProjectionAccessibilityService.connected.collectAsStateWithLifecycle()
     val standby by ProjectionStandbyService.state.collectAsStateWithLifecycle()
-    var confirmUnattended by rememberSaveable { mutableStateOf(false) }
     var unattendedTicket by rememberSaveable { mutableStateOf<String?>(null) }
     val unattendedConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val ticket = unattendedTicket
@@ -117,41 +116,6 @@ fun HostScreen(
             }
         }
     }
-
-    if (confirmUnattended) {
-        AlertDialog(
-            onDismissRequest = { confirmUnattended = false },
-            title = { Text("开启亮屏无人值守") },
-            text = {
-                Text("开启后，有设备访问权限的管理台账号可以直接查看屏幕。已开启无障碍服务时也可以远程触控。请保持手机亮屏并解锁。锁屏、重启或结束共享后，需要在手机上重新开启。")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmUnattended = false
-                    val ticket = ProjectionStandbyService.signaling?.reserveUnattended()
-                    if (ticket == null) {
-                        Toast.makeText(context, "请使用 WSS 上线，并先结束当前协助或待确认请求", Toast.LENGTH_SHORT).show()
-                    } else {
-                        unattendedTicket = ticket
-                        runCatching {
-                            val manager = context.getSystemService(MediaProjectionManager::class.java)
-                            val intent = if (Build.VERSION.SDK_INT >= 34) {
-                                manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
-                            } else {
-                                manager.createScreenCaptureIntent()
-                            }
-                            unattendedConsent.launch(intent)
-                        }.onFailure {
-                            unattendedTicket = null
-                            ProjectionStandbyService.reject(ticket)
-                        }
-                    }
-                }) { Text("开启并授权录屏") }
-            },
-            dismissButton = { TextButton(onClick = { confirmUnattended = false }) { Text("取消") } }
-        )
-    }
-
 
     LaunchedEffect(state.toastMessage) {
         state.toastMessage?.let {
@@ -403,12 +367,37 @@ fun HostScreen(
                     TextButton(
                         enabled = standby.unattended || (standby.online && unattendedTicket == null),
                         onClick = {
-                            if (standby.unattended) ProjectionHostService.stop(context)
-                            else confirmUnattended = true
+                            if (standby.unattended) {
+                                ProjectionHostService.stop(context)
+                            } else {
+                                val ticket = ProjectionStandbyService.signaling?.reserveUnattended()
+                                if (ticket == null) {
+                                    Toast.makeText(context, "请使用 WSS 上线，并先结束当前协助或待确认请求", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    unattendedTicket = ticket
+                                    runCatching {
+                                        val manager = context.getSystemService(MediaProjectionManager::class.java)
+                                        val intent = if (Build.VERSION.SDK_INT >= 34) {
+                                            manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+                                        } else {
+                                            manager.createScreenCaptureIntent()
+                                        }
+                                        unattendedConsent.launch(intent)
+                                    }.onFailure {
+                                        unattendedTicket = null
+                                        ProjectionStandbyService.reject(ticket)
+                                    }
+                                }
+                            }
                         }
                     ) {
                         Text(if (standby.unattended) "结束亮屏无人值守" else "开启亮屏无人值守")
                     }
+                    Text(
+                        "无人值守开启后，远端连接无需手机确认。请保持手机亮屏并解锁。",
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     FlowRow {
                         TextButton(onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) {
                             Text(if (touchReady) "远程触控已开启" else "开启远程触控")

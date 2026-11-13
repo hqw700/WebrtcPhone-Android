@@ -80,7 +80,7 @@ class SessionManager(
             keepAliveJob = scope.launch {
                 delay(KEEP_ALIVE_MS)
                 Log.i(TAG, "keep-alive expired, closing session")
-                close()
+                close(preserveProjection = true)
             }
         }
     }
@@ -90,10 +90,20 @@ class SessionManager(
         _session.value?.setAudioEnabled(enabled)
     }
 
-    fun close() {
+    private data class ResumeScope(val endpoint: String, val device: String, val auth: StreamAuth)
+    private val resumeKeys = object : LinkedHashMap<ResumeScope, String>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ResumeScope, String>?) = size > 64
+    }
+
+    private fun resumeScope(target: StreamTarget) =
+        ResumeScope(target.endpoint.serialize(), target.deviceId, target.auth)
+
+    fun close(endProjection: Boolean = false, preserveProjection: Boolean = false) {
+        if (endProjection) _session.value?.let { resumeKeys.remove(resumeScope(it.target)) }
+        else if (!preserveProjection) resumeKeys.clear()
         keepAliveJob?.cancel()
         watchJob?.cancel()
-        _session.value?.close()
+        _session.value?.close(endProjection)
         _session.value = null
         _retry.value = 0
     }
@@ -101,7 +111,10 @@ class SessionManager(
     private fun replace(target: StreamTarget): RtcSession {
         watchJob?.cancel()
         val old = _session.value
-        val s = RtcSession(context, engine, httpFactory, target, executor)
+        val key = resumeKeys.getOrPut(resumeScope(target)) {
+            java.util.UUID.randomUUID().toString().replace("-", "")
+        }
+        val s = RtcSession(context, engine, httpFactory, target, executor, key)
         renderer?.let { s.setRenderer(it) }
         s.setAudioEnabled(audioEnabled)
         _session.value = s

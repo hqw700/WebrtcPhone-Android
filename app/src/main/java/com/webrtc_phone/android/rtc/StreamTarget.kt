@@ -48,6 +48,7 @@ data class StreamTarget(
     val transport: StreamTransport = StreamTransport.WEBRTC,
     /** 设备列表里已知的分辨率，首帧到达前用于占位比例 */
     val displayHint: Pair<Int, Int>? = null,
+    val projectionOnDemand: Boolean = false,
 ) {
     val viewOnly: Boolean get() = accessMode == AccessMode.VIEW_ONLY
     val isGuest: Boolean get() = auth is StreamAuth.Share

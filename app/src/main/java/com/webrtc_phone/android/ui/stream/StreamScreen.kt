@@ -178,7 +178,7 @@ fun StreamScreen(
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = sheetPanel == Panel.FILES)
         ModalBottomSheet(onDismissRequest = { vm.panel = Panel.NONE }, sheetState = state) {
             when (sheetPanel) {
-                Panel.TOOLS -> ToolGrid(vm, toolSections(vm, connected, onScreenshot, onExit))
+                Panel.TOOLS -> ToolGrid(vm, toolSections(vm, connected, t.projectionOnDemand || deviceInfo?.projectionOnDemand == true, onScreenshot, onExit))
                 Panel.TEXT -> TextSendPanel(vm)
                 Panel.FILES -> Box(Modifier.fillMaxHeight(0.85f)) { FilePanel(files, vm) { vm.panel = Panel.NONE } }
                 Panel.QUALITY -> QualityPanel(vm) { vm.panel = Panel.NONE }

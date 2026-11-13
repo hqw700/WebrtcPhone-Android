@@ -171,12 +171,18 @@ internal class ProjectionSignaling(
                     "request-offer" -> {
                         val options = payload.optJSONObject("scrcpy_options")
                         if (options?.optString("video_source") == "camera" || options?.optBoolean("video", true) == false) return
-                        val control = trustedSignaling && message.optBoolean("projection_input_allowed")
+                        // 旧信令没有权限字段；仅在字段缺失时沿用旧部署的触控行为。
+                        val control = trustedSignaling && (
+                            !message.has("projection_input_allowed") || message.optBoolean("projection_input_allowed")
+                        )
                         val owner = message.optString("projection_owner").takeIf { trustedSignaling }.orEmpty()
                         val resumeKey = payload.optString("projection_resume_key")
                             .takeIf { it.length == 32 && it.all { c -> c in '0'..'9' || c in 'a'..'f' } }.orEmpty()
-                        val allowUnattended = trustedSignaling && owner.isNotBlank() &&
-                            message.optBoolean("projection_unattended_allowed")
+                        // 旧信令不下发无人值守授权字段，沿用手机主动开启的录屏授权。
+                        val allowUnattended = trustedSignaling && (
+                            !message.has("projection_unattended_allowed") ||
+                                (owner.isNotBlank() && message.optBoolean("projection_unattended_allowed"))
+                        )
                         if (unattended && !allowUnattended) {
                             sendStatus(id, "unattended_denied")
                             return

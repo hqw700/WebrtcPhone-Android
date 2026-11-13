@@ -234,8 +234,33 @@ class StreamActivity : ComponentActivity() {
     }
 
     private fun exit() {
-        vm.disconnect()
-        finish()
+        val session = vm.session.value
+        val phase = vm.phase.value
+        val projection = vm.target.projectionOnDemand || session?.deviceInfo?.value?.projectionOnDemand == true
+        val sharing = projection && (phase == com.webrtc_phone.android.rtc.ConnectionPhase.Connected ||
+            phase == com.webrtc_phone.android.rtc.ConnectionPhase.Interrupted ||
+            phase == com.webrtc_phone.android.rtc.ConnectionPhase.Negotiating)
+        val waiting = phase == com.webrtc_phone.android.rtc.ConnectionPhase.WaitingProjection
+        if (!sharing && !waiting) {
+            vm.disconnect(preserveProjection = true)
+            finish()
+            return
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("退出在线协助")
+            .setMessage(if (sharing) "暂时退出后，只要被控手机仍在共享，就能在本 App 中重新连接。结束共享后需要重新授权。" else "退出会取消尚未确认的投屏请求。")
+            .setNegativeButton("取消", null)
+            .setPositiveButton(if (sharing) "结束共享" else "取消请求") { _, _ ->
+                vm.disconnect(endProjection = true)
+                finish()
+            }
+            .apply {
+                if (sharing) setNeutralButton("暂时退出") { _, _ ->
+                    vm.disconnect(preserveProjection = true)
+                    finish()
+                }
+            }
+            .show()
     }
 
     // ---------- 截图 ----------

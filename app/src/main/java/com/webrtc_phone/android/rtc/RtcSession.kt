@@ -67,6 +67,7 @@ class RtcSession(
     private val httpFactory: HttpClientFactory,
     val target: StreamTarget,
     private val executor: ScheduledExecutorService,
+    private val projectionResumeKey: String,
 ) {
     private val _phase = MutableStateFlow<ConnectionPhase>(ConnectionPhase.Signaling)
     val phase: StateFlow<ConnectionPhase> = _phase.asStateFlow()
@@ -184,7 +185,13 @@ class RtcSession(
         }).also { it.connect() }
     }
 
-    fun close() = executor.execute { teardown(ConnectionPhase.Closed) }
+    fun close(endProjection: Boolean = false) = executor.execute {
+        if (endProjection && !closed) {
+            signaling?.send(SignalingProtocol.forward(target.deviceId, org.json.JSONObject()
+                .put("type", "projection-end").put("projection_resume_key", projectionResumeKey)))
+        }
+        teardown(ConnectionPhase.Closed)
+    }
 
     private fun post(block: () -> Unit) {
         if (closed) return
@@ -236,7 +243,7 @@ class RtcSession(
         when (msg) {
             is SignalingMessage.Config -> {
                 createPeerConnection(msg)
-                signaling?.send(SignalingProtocol.requestOffer(target.deviceId, ScrcpyOptions.build(target)))
+                signaling?.send(SignalingProtocol.requestOffer(target.deviceId, ScrcpyOptions.build(target), projectionResumeKey))
                 _phase.value = ConnectionPhase.WaitingOffer
             }
             is SignalingMessage.DeviceInfo -> {

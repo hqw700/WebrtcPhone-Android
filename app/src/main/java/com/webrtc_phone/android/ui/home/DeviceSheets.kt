@@ -95,17 +95,19 @@ fun DeviceActionSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            SettingRow("进入投屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onOpen() })
-            SettingRow(
-                "WS 模式投屏", "WebSocket 中转，免 P2P 穿透（视频+直控）",
-                icon = Icons.Outlined.Bolt, enabled = device.online,
-                onClick = { onDismiss(); onOpenWs() }
-            )
-            SettingRow(
-                "摄像头监控", "使用云手机摄像头作为画面，含环境音",
-                icon = Icons.Outlined.Videocam, enabled = device.online,
-                onClick = { onDismiss(); onCamera() }
-            )
+            SettingRow(if (device.info.projectionOnDemand) "请求投屏" else "进入投屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onOpen() })
+            if (!device.info.projectionOnDemand) {
+                SettingRow(
+                    "WS 模式投屏", "WebSocket 中转，免 P2P 穿透（视频+直控）",
+                    icon = Icons.Outlined.Bolt, enabled = device.online,
+                    onClick = { onDismiss(); onOpenWs() }
+                )
+                SettingRow(
+                    "摄像头监控", "使用云手机摄像头作为画面，含环境音",
+                    icon = Icons.Outlined.Videocam, enabled = device.online,
+                    onClick = { onDismiss(); onCamera() }
+                )
+            }
             if (canShare) SettingRow("分享 / 生成卡密", icon = Icons.Outlined.Share, onClick = { onDismiss(); onShare() })
             if (isAdmin) {
                 val leaseSub = if (device.leaseHolder != null) {

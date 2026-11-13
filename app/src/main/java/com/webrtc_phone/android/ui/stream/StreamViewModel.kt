@@ -234,6 +234,7 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
                 deviceName = name,
                 mode = StreamMode.Screen,
                 settings = settings.stream.value,
+                projectionOnDemand = d.info.projectionOnDemand,
                 displayHint = d.info.primaryDisplay?.let { it.width to it.height },
             )
         )
@@ -438,9 +439,9 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
         ws.start()
     }
 
-    fun disconnect() {
+    fun disconnect(endProjection: Boolean = false, preserveProjection: Boolean = false) {
         if (keyboardMode) setKeyboard(false)
-        if (isWs) { _wsSession.value?.close(); _wsSession.value = null } else manager.close()
+        if (isWs) { _wsSession.value?.close(); _wsSession.value = null } else manager.close(endProjection, preserveProjection)
         StreamLauncher.clear()
     }
 

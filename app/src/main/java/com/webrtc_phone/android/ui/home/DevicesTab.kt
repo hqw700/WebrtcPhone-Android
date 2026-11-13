@@ -237,7 +237,15 @@ fun DeviceCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(ratio).clip(MaterialTheme.shapes.medium).background(Color(0xFF111318))) {
-            if (snapshot != null) {
+            if (device.info.projectionOnDemand) {
+                Text(
+                    "在线协助\n未开启无人值守时需在手机上确认",
+                    modifier = Modifier.align(Alignment.Center).padding(8.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            } else if (snapshot != null) {
                 Image(
                     bitmap = remember(snapshot.version) { snapshot.bitmap.asImageBitmap() },
                     contentDescription = null,

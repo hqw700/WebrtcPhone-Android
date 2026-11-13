@@ -54,6 +54,7 @@ data class DeviceInfo(
     val cameraSupport: Boolean = false,
     val cameras: List<CameraLens> = emptyList(),
     val displays: List<DisplayInfo> = emptyList(),
+    val projectionOnDemand: Boolean = false,
 ) {
     val primaryDisplay: DisplayInfo? get() = displays.firstOrNull()
     val title: String

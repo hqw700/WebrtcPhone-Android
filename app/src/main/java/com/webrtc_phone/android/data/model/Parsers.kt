@@ -46,6 +46,7 @@ object Parsers {
             isEmulator = o.optBoolean("is_emulator"),
             agentVersion = o.optString("agent_version", o.optString("app_version")),
             cameraSupport = o.optBoolean("camera_support"),
+            projectionOnDemand = o.optBoolean("projection_on_demand"),
             cameras = o.optJSONArray("cameras").objects().map {
                 CameraLens(
                     id = it.optString("id", "0"),

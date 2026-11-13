@@ -84,9 +84,9 @@ object SignalingProtocol {
     fun forward(deviceId: String, payload: JSONObject): String =
         JSONObject().put("message_type", "forward").put("device_id", deviceId).put("payload", payload).toString()
 
-    fun requestOffer(deviceId: String, scrcpyOptions: JSONObject): String = forward(
+    fun requestOffer(deviceId: String, scrcpyOptions: JSONObject, resumeKey: String? = null): String = forward(
         deviceId,
-        JSONObject().put("type", "request-offer").put("ip_preference", "auto").put("scrcpy_options", scrcpyOptions)
+        JSONObject().put("type", "request-offer").put("ip_preference", "auto").put("scrcpy_options", scrcpyOptions).put("projection_resume_key", resumeKey)
     )
 
     fun answer(deviceId: String, sdp: String): String =
