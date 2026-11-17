@@ -47,6 +47,7 @@ data class DeviceFilter(
         val q = query.trim().lowercase()
         if (q.isEmpty()) return true
         return d.id.lowercase().contains(q) ||
+            d.alias.lowercase().contains(q) ||
             d.info.title.lowercase().contains(q) ||
             devTagIds.any { id -> tags.tags.firstOrNull { it.id == id }?.name?.lowercase()?.contains(q) == true }
     }
@@ -96,7 +97,7 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
         return StreamTarget(
             endpoint = endpoint,
             deviceId = d.id,
-            deviceName = d.info.title.ifBlank { d.id },
+            deviceName = d.displayName,
             auth = StreamAuth.User(session.token),
             allowFileTx = policy?.forbidFilePush != true,
             allowTerminal = policy?.forbidTerminal != true,
@@ -109,6 +110,8 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
     }
 
     fun deleteDevice(d: Device) = launchOp("已删除 ${d.id}") { repo.deleteDevice(d.id) }
+
+    fun setDeviceAlias(deviceId: String, alias: String) = launchOp("名称已更新") { repo.setDeviceAlias(deviceId, alias) }
 
     fun setDeviceTags(deviceId: String, ids: List<String>) = launchOp("标签已更新") { repo.setDeviceTags(deviceId, ids) }
 

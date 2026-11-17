@@ -310,21 +310,28 @@ fun DeviceCard(
                     }
                 }
                 Text(
-                    device.id, color = Color.White,
+                    device.displayName, color = Color.White,
                     style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleSmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
-                if (!compact && device.info.title.isNotBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            device.info.title + (if (device.info.androidVersion.isNotBlank()) " · Android ${device.info.androidVersion}" else ""),
-                            color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
-                        )
-                        if (device.leaseHolder != null) {
-                            Spacer(Modifier.width(4.dp))
-                            Icon(Icons.Outlined.Timer, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(12.dp))
-                            Text(device.leaseHolder, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                if (!compact) {
+                    val subText = if (device.alias.isNotBlank()) {
+                        "${device.id}" + (if (device.info.title.isNotBlank()) " · ${device.info.title}" else "")
+                    } else if (device.info.title.isNotBlank()) {
+                        device.info.title + (if (device.info.androidVersion.isNotBlank()) " · Android ${device.info.androidVersion}" else "")
+                    } else ""
+                    if (subText.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                subText,
+                                color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (device.leaseHolder != null) {
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Outlined.Timer, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(12.dp))
+                                Text(device.leaseHolder, color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            }
                         }
                     }
                 }

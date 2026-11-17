@@ -227,7 +227,7 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
         panel = Panel.NONE
         mirrored = false
         cameraZoom = 1f
-        val name = d.info.title.ifBlank { d.id }
+        val name = d.displayName
         reconnectWith(
             target.copy(
                 deviceId = d.id,

@@ -81,8 +81,9 @@ data class Device(
     val myLeaseRemainingSeconds: Long? = null,
     /** 管理员：当前活跃租约持有者 */
     val leaseHolder: String? = null,
+    val alias: String = "",
 ) {
-    val displayName: String get() = id
+    val displayName: String get() = alias.ifBlank { id }
     val inUse: Boolean get() = clientCount > 0
     val screenOff: Boolean get() = screenState.equals("off", ignoreCase = true)
 }

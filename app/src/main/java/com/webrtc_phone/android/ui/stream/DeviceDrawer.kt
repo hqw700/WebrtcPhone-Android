@@ -186,7 +186,7 @@ private fun DeviceDrawerItem(device: Device, snapshot: Snapshot?, deviceTags: Li
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    device.id, style = MaterialTheme.typography.titleSmall,
+                    device.displayName, style = MaterialTheme.typography.titleSmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
                 )
             }

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CastConnected
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.Share
@@ -76,20 +77,24 @@ fun DeviceActionSheet(
     onCamera: () -> Unit,
     onShare: () -> Unit,
     onTags: () -> Unit,
+    onSetAlias: ((String) -> Unit)? = null,
     onLease: () -> Unit = {},
     onDelete: () -> Unit,
 ) {
     var info by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
+    var aliasInput by remember(device.alias) { mutableStateOf(device.alias) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(if (device.online) AppColors.Online else AppColors.Offline, size = 10)
                 Spacer(Modifier.padding(4.dp))
                 Column {
-                    Text(device.id, style = MaterialTheme.typography.titleMedium)
-                    if (device.info.title.isNotBlank()) Text(
-                        device.info.title, style = MaterialTheme.typography.bodySmall,
+                    Text(device.displayName, style = MaterialTheme.typography.titleMedium)
+                    val sub = if (device.alias.isNotBlank()) "ID: ${device.id}" + (if (device.info.title.isNotBlank()) " · ${device.info.title}" else "") else device.info.title
+                    if (sub.isNotBlank()) Text(
+                        sub, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -109,6 +114,14 @@ fun DeviceActionSheet(
                 )
             }
             if (canShare) SettingRow("分享 / 生成卡密", icon = Icons.Outlined.Share, onClick = { onDismiss(); onShare() })
+            if (onSetAlias != null) {
+                SettingRow(
+                    "重命名",
+                    if (device.alias.isNotBlank()) "当前: ${device.alias}" else "点击为设备设置自定义名称",
+                    icon = Icons.Outlined.Edit,
+                    onClick = { showRename = true }
+                )
+            }
             if (isAdmin) {
                 val leaseSub = if (device.leaseHolder != null) {
                     val rem = device.myLeaseRemainingSeconds?.let { "，剩 " + Formatters.duration(it) } ?: ""
@@ -126,6 +139,35 @@ fun DeviceActionSheet(
                 SettingRow("删除设备档案", icon = Icons.Outlined.Delete, tint = AppColors.Danger, onClick = { confirmDelete = true })
             }
         }
+    }
+    if (showRename) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRename = false },
+            title = { Text("重命名设备") },
+            text = {
+                Column {
+                    Text("请输入新的设备名称，留空则恢复默认显示 ID：", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = aliasInput,
+                        onValueChange = { aliasInput = it },
+                        singleLine = true,
+                        placeholder = { Text(device.id) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    showRename = false
+                    onSetAlias?.invoke(aliasInput.trim())
+                    onDismiss()
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showRename = false }) { Text("取消") }
+            }
+        )
     }
     if (confirmDelete) ConfirmDialog(
         "删除设备", "将删除离线设备 ${device.id} 的档案，设备重新上线后会自动重新注册。",
@@ -462,7 +504,7 @@ fun CameraPickerSheet(device: Device, onDismiss: () -> Unit, onStart: (CameraPar
     var mic by remember { mutableStateOf(true) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
-            Text("摄像头监控 · ${device.id}", style = MaterialTheme.typography.titleMedium)
+            Text("摄像头监控 · ${device.displayName}", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(16.dp))
             Text("镜头", style = MaterialTheme.typography.labelLarge)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

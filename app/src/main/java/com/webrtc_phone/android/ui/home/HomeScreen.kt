@@ -146,6 +146,7 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
             onCamera = { cameraFor = d },
             onShare = { navigate(Routes.shares(d.id, create = true)) },
             onTags = { tagsFor = d },
+            onSetAlias = { newAlias -> vm.setDeviceAlias(d.id, newAlias) },
             onLease = { leaseFor = d },
             onDelete = { vm.deleteDevice(d) },
         )

@@ -68,6 +68,7 @@ object Parsers {
         val lease = o.optJSONObject("lease")
         return Device(
             id = o.optString("device_id", o.optString("id")),
+            alias = o.optString("display_name", o.optString("alias")).trim(),
             info = deviceInfo(o.optJSONObject("device_info")),
             online = o.optBoolean("online", false),
             screenState = o.optString("screen_state"),

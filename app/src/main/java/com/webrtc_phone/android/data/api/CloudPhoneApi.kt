@@ -53,6 +53,14 @@ class CloudPhoneApi(val client: ApiClient) {
         client.delete("/api/devices/" + Uri.encode(deviceId))
     }
 
+    /** 设置/修改设备显示别名（user / admin） */
+    suspend fun setDeviceAlias(deviceId: String, alias: String) {
+        client.post(
+            "/api/devices/alias",
+            JSONObject().put("device_id", deviceId).put("alias", alias.trim())
+        )
+    }
+
     // ---------- 标签（admin） ----------
 
     suspend fun tags(): TagsPayload = ApiClient.parse { Parsers.tags(JSONObject(client.get("/api/tags"))) }

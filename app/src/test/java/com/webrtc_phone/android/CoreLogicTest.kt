@@ -97,6 +97,20 @@ class ParsersTest {
         assertTrue(Parsers.devices("null").isEmpty())
     }
 
+    @Test fun devicesWithAlias() {
+        val body = """[{"device_id":"p1","display_name":"测试机A"}]"""
+        val d = Parsers.devices(body).single()
+        assertEquals("p1", d.id)
+        assertEquals("测试机A", d.alias)
+        assertEquals("测试机A", d.displayName)
+
+        val bodyNoAlias = """[{"device_id":"p2"}]"""
+        val d2 = Parsers.devices(bodyNoAlias).single()
+        assertEquals("p2", d2.id)
+        assertEquals("", d2.alias)
+        assertEquals("p2", d2.displayName)
+    }
+
     @Test fun tagsRoundTrip() {
         val p = TagsPayload(listOf(Tag("t1", "游戏", "#FF0000")), mapOf("d1" to listOf("t1"), "d2" to emptyList()))
         val back = Parsers.tags(Parsers.tagsToJson(p))
@@ -234,6 +248,12 @@ class DeviceFilterTest {
         val f = DeviceFilter(query = "rk3588")
         assertTrue(f.matches(dev("rk3588-aio"), tags))
         assertFalse(f.matches(dev("cp-210"), tags))
+    }
+
+    @Test fun searchMatchesAlias() {
+        val d = Parsers.devices("""[{"device_id":"pixel_7","display_name":"运营机01"}]""").single()
+        val f = DeviceFilter(query = "运营")
+        assertTrue(f.matches(d, tags))
     }
 
     @Test fun searchMatchesTagName() {

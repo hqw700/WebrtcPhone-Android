@@ -214,6 +214,13 @@ class DeviceRepository(
 
     // ---------- 设备 / 标签管理 ----------
 
+    suspend fun setDeviceAlias(deviceId: String, alias: String) {
+        api.setDeviceAlias(deviceId, alias)
+        _devices.update { l ->
+            l.map { if (it.id == deviceId) it.copy(alias = alias.trim()) else it }
+        }
+    }
+
     suspend fun deleteDevice(deviceId: String) {
         api.deleteDevice(deviceId)
         _devices.update { l -> l.filterNot { it.id == deviceId } }
