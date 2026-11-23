@@ -74,6 +74,7 @@
   - `VideoArea` 等比居中；`TouchForwarder` + `TouchMapper` 多点触控、鼠标右键=返回、滚轮。
   - 悬浮球（点击=工具面板，长按=设备侧边栏）、左侧边缘把手 `›`（打开设备侧边栏）、虚拟导航键。
   - 工具面板：电源/音量/通知栏/截图、键盘输入/文本下发/剪贴板、文件/安装应用/终端、切换设备/画质/声音/性能/连接信息/重连/断开。
+  - 设备日志：复用当前投屏设备的 `adb-channel` 运行 logcat，支持缓冲区、级别、文本/正则、PID、Tag 等本地组合筛选；进入时接管 PTY，退出时发送 Ctrl-C，避免与终端前台任务并行争用同一 shell。
   - `DeviceDrawer`：投屏中切换设备（`StreamViewModel.switchDevice`），侧边栏打开期间每 10s 刷新设备列表。
   - 终端 `TerminalWebView`：**必须懒创建**（进程内初始化 Chromium 后部分机型 libwebrtc 枚举不到 H264 硬解）；只加载 `file:///android_asset/terminal`，拦截所有跳转、禁止网络。
   - 摄像头监控：镜头/分辨率/帧率选择、环境音、镜像、抓拍、双指数字变焦（改 SurfaceView 尺寸实现）。

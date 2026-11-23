@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
@@ -75,6 +76,9 @@ fun toolSections(
             ToolItem("终端", Icons.Outlined.Terminal, connected && t.allowTerminal && !t.viewOnly && !ws && !projection) {
                 vm.terminalCreated = true
                 vm.panel = Panel.TERMINAL
+            },
+            ToolItem("设备日志", Icons.Outlined.BugReport, connected && t.allowTerminal && !t.viewOnly && !ws) {
+                vm.panel = Panel.LOGCAT
             },
         ),
         "画面与连接" to listOfNotNull(

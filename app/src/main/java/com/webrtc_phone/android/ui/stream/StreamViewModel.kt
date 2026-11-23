@@ -38,7 +38,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class Panel { NONE, TOOLS, TEXT, FILES, TERMINAL, QUALITY, INFO, APPS }
+enum class Panel { NONE, TOOLS, TEXT, FILES, TERMINAL, LOGCAT, QUALITY, INFO, APPS }
 
 /**
  * 投屏页状态持有者。连接本身由进程级 SessionManager 托管（页面重建不断线），

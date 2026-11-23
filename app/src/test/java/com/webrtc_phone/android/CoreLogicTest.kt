@@ -18,6 +18,9 @@ import com.webrtc_phone.android.rtc.StreamMode
 import com.webrtc_phone.android.rtc.StreamTarget
 import com.webrtc_phone.android.rtc.channel.ClipboardProtocol
 import com.webrtc_phone.android.rtc.channel.InputProtocol
+import com.webrtc_phone.android.rtc.channel.LogcatFilter
+import com.webrtc_phone.android.rtc.channel.LogcatLevel
+import com.webrtc_phone.android.rtc.channel.LogcatParser
 import com.webrtc_phone.android.rtc.channel.TouchAction
 import com.webrtc_phone.android.rtc.signaling.SignalingMessage
 import com.webrtc_phone.android.rtc.signaling.SignalingProtocol
@@ -160,6 +163,33 @@ class ParsersTest {
         val s = Parsers.share(JSONObject("""{"token_id":"st_1","card_code":"ABC","access_mode":"view_only",
             "expires_at":"0001-01-01T00:00:00Z","active_connections":1}"""))
         assertEquals("st_1", s.token); assertEquals(AccessMode.VIEW_ONLY, s.accessMode); assertNull(s.expiresAt)
+    }
+}
+
+class LogcatTest {
+    @Test fun parsesThreadTime() {
+        val line = LogcatParser.parse("11-23 14:30:12.345  1234  5678 E AndroidRuntime: FATAL EXCEPTION: main")
+        assertEquals("11-23 14:30:12.345", line.timestamp)
+        assertEquals(1234, line.pid)
+        assertEquals(5678, line.tid)
+        assertEquals(LogcatLevel.ERROR, line.level)
+        assertEquals("AndroidRuntime", line.tag)
+        assertEquals("FATAL EXCEPTION: main", line.message)
+    }
+
+    @Test fun filtersLevelPidTagAndText() {
+        val line = LogcatParser.parse("11-23 14:30:12.345  1234  5678 W RtcSession: reconnect failed")
+        assertTrue(LogcatFilter(query = "RECONNECT", minimumLevel = LogcatLevel.INFO, pid = 1234).matches(line))
+        assertTrue(LogcatFilter(query = "reconnect.*failed", regex = true, includedTags = setOf("rtcsession")).matches(line))
+        assertFalse(LogcatFilter(minimumLevel = LogcatLevel.ERROR).matches(line))
+        assertFalse(LogcatFilter(excludedTags = setOf("RtcSession")).matches(line))
+    }
+
+    @Test fun invalidRegexDoesNotCrash() {
+        val line = LogcatParser.parse("D/Test( 42): hello")
+        assertFalse(LogcatFilter(query = "[", regex = true).matches(line))
+        assertEquals(LogcatLevel.DEBUG, line.level)
+        assertEquals(42, line.pid)
     }
 }
 

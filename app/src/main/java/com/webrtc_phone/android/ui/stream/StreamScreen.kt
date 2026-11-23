@@ -175,7 +175,7 @@ fun StreamScreen(
     // 底部面板
     val sheetPanel = vm.panel.takeIf { it != Panel.NONE && it != Panel.TERMINAL }
     if (sheetPanel != null) {
-        val state = rememberModalBottomSheetState(skipPartiallyExpanded = sheetPanel == Panel.FILES)
+        val state = rememberModalBottomSheetState(skipPartiallyExpanded = sheetPanel == Panel.FILES || sheetPanel == Panel.LOGCAT)
         ModalBottomSheet(onDismissRequest = { vm.panel = Panel.NONE }, sheetState = state) {
             when (sheetPanel) {
                 Panel.TOOLS -> ToolGrid(vm, toolSections(vm, connected, t.projectionOnDemand || deviceInfo?.projectionOnDemand == true, onScreenshot, onExit))
@@ -184,6 +184,9 @@ fun StreamScreen(
                 Panel.QUALITY -> QualityPanel(vm) { vm.panel = Panel.NONE }
                 Panel.INFO -> InfoPanel(vm)
                 Panel.APPS -> AppsPanel(vm) { vm.panel = Panel.FILES }
+                Panel.LOGCAT -> Box(Modifier.fillMaxHeight(0.9f)) {
+                    LogcatPanel(vm, terminal) { vm.panel = Panel.NONE }
+                }
                 else -> Unit
             }
         }

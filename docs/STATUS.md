@@ -2,6 +2,12 @@
 
 本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
 
+## 2026-11-23 投屏内设备日志查看
+
+- 投屏工具面板新增「设备日志」，通过当前设备的 `adb-channel` 采集 `logcat -v threadtime`，面板明确显示设备名，退出时自动停止采集并释放 shell 前台任务。
+- 支持 main/system/crash/events/radio 缓冲区组合、最低日志级别、普通文本或正则搜索、大小写、PID、包含/排除 Tag、暂停、自动滚动、清空、重新采集及复制筛选结果；本地最多保留最近 5000 行。
+- 增加 threadtime/brief 解析、ANSI 清理与组合筛选单元测试；`compileDebugKotlin` 和 `testDebugUnitTest` 已通过，待连接实际云手机复测持续采集与大日志量滚动。
+
 ## 2026-11-02 Shizuku 启动被旧 Root 日志阻断
 
 - ADB 确认截图来自已连接的 Android 15 真机：Shizuku 正常运行，但 Agent 不在进程列表中。`cloudphone-agent-run.log` 属于 `root:root`，权限 `0644`；01:20:23–24 的注册、鉴权成功信息是旧日志。
