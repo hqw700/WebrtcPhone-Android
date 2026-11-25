@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>穿云投屏 · 单机直连</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #151a24; --border: #263042; --text: #e6edf7; --muted: #8b9bb4;
+    --brand: #3b82f6; --brand-hover: #2563eb; --ok: #22c55e; --warn: #f59e0b; --err: #ef4444;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  .app { display: flex; flex-direction: column; width: 100%; height: 100%; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .title-wrap { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .dot.err { background: var(--err); }
+  .dev-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: rgba(59,130,246,.16); color: #93c5fd; border: 1px solid rgba(59,130,246,.35); white-space: nowrap; }
+  .top-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  button { background: #1f2736; color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  button:hover:not(:disabled) { background: #293347; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--brand-hover); }
+  button.danger { color: #fca5a5; border-color: rgba(239,68,68,.4); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .stage { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: #000; touch-action: none; user-select: none; }
+  video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+  .hud { position: absolute; top: 10px; left: 10px; background: rgba(11,14,20,.72); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); padding: 5px 10px; border-radius: 8px; font-size: 11px; color: #cbd5e1; pointer-events: none; line-height: 1.5; }
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(11,14,20,.88); backdrop-filter: blur(8px); z-index: 20; padding: 16px; }
+  .overlay.hidden { display: none; }
+  .card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+  .card h2 { margin: 0 0 6px; font-size: 18px; }
+  .card p { margin: 0 0 16px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .card input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; }
+  .card .err-msg { color: #fca5a5; font-size: 12px; margin: -4px 0 10px; min-height: 16px; }
+  .card .btn-row { display: flex; gap: 8px; }
+  .card .btn-row button { flex: 1; justify-content: center; padding: 10px; font-size: 13px; }
+  .toolbar { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 10px; background: var(--panel); border-top: 1px solid var(--border); flex-wrap: wrap; flex-shrink: 0; }
+  .text-bar { display: flex; align-items: center; gap: 6px; max-width: 300px; flex: 1; min-width: 160px; }
+  .text-bar input { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 12px; }
+  .toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); background: rgba(15,23,42,.92); border: 1px solid var(--border); color: #fff; padding: 7px 14px; border-radius: 999px; font-size: 12px; z-index: 50; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 640px) {
+    .topbar { padding: 6px 10px; }
+    .badge { display: none; }
+    .toolbar { padding: 6px; gap: 4px; }
+    button { padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="title-wrap">
+      <span id="statusDot" class="dot"></span>
+      <span id="devName" class="dev-name">穿云投屏 · 单机直连</span>
+      <span id="modeBadge" class="badge">WebRTC 直连</span>
+    </div>
+    <div class="top-actions">
+      <button id="btnAudio" title="切换声音">🔇 静音</button>
+      <button id="btnSource" style="display:none" title="切换屏幕/摄像头">📷 摄像头</button>
+      <button id="btnFullscreen" title="全屏">⛶ 全屏</button>
+      <button id="btnReconnect" title="重新连接">↻ 重连</button>
+      <button id="btnLogout" class="danger" style="display:none">退出</button>
+    </div>
+  </div>
+
+  <div id="stage" class="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <audio id="audio" autoplay playsinline muted style="display:none"></audio>
+    <div id="hud" class="hud">正在初始化…</div>
+    <div id="overlay" class="overlay">
+      <div class="card">
+        <h2 id="ovTitle">单机直连</h2>
+        <p id="ovDesc">正在探测设备信息…</p>
+        <form id="loginForm" style="display:none">
+          <input id="pwdInput" type="password" placeholder="请输入直连访问密码" autocomplete="current-password">
+          <div id="errMsg" class="err-msg"></div>
+          <div class="btn-row">
+            <button type="submit" class="primary">立即直连</button>
+          </div>
+        </form>
+        <div id="actionRow" class="btn-row" style="display:none">
+          <button id="ovRetry" type="button" class="primary">重试连接</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button data-key="4">◀ 返回</button>
+    <button data-key="3">● 主页</button>
+    <button data-key="187">▢ 多任务</button>
+    <button data-key="26" id="btnPower">⏻ 电源</button>
+    <button data-key="24" id="btnVolUp">🔊+</button>
+    <button data-key="25" id="btnVolDown">🔉-</button>
+    <div class="text-bar">
+      <input id="textInput" type="text" placeholder="输入文本/汉字回车发送…">
+      <button id="btnSendText" class="primary">发送</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const video = $('video');
+  const audioEl = $('audio');
+  const stage = $('stage');
+  const hud = $('hud');
+  const overlay = $('overlay');
+  const ovTitle = $('ovTitle');
+  const ovDesc = $('ovDesc');
+  const loginForm = $('loginForm');
+  const pwdInput = $('pwdInput');
+  const errMsg = $('errMsg');
+  const actionRow = $('actionRow');
+  const statusDot = $('statusDot');
+  const devNameEl = $('devName');
+  const modeBadge = $('modeBadge');
+  const btnAudio = $('btnAudio');
+  const btnSource = $('btnSource');
+  const btnLogout = $('btnLogout');
+
+  const TOKEN_KEY = 'cp_standalone_token';
+  let token = sessionStorage.getItem(TOKEN_KEY) || '';
+  let authRequired = false;
+  let deviceId = '';
+  let deviceInfo = null;
+  let isProjection = false;
+  let videoSource = 'display';
+  let ws = null;
+  let pc = null;
+  let videoStream = null;
+  let audioStream = null;
+  let inputCh = null;
+  let pingTimer = null;
+  let statsTimer = null;
+  let lastBytes = 0;
+  let lastTs = 0;
+  let pointerDown = false;
+
+  function showToast(msg) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  function setStatus(state, text) {
+    statusDot.className = 'dot ' + (state || '');
+    hud.textContent = text;
+  }
+
+  function showOverlay(title, desc, opts = {}) {
+    ovTitle.textContent = title;
+    ovDesc.textContent = desc;
+    loginForm.style.display = opts.login ? 'block' : 'none';
+    actionRow.style.display = opts.retry ? 'flex' : 'none';
+    errMsg.textContent = opts.error || '';
+    overlay.classList.remove('hidden');
+    if (opts.login) setTimeout(() => pwdInput.focus(), 50);
+  }
+
+  function hideOverlay() {
+    overlay.classList.add('hidden');
+  }
+
+  async function apiFetch(path, init = {}) {
+    const headers = Object.assign({}, init.headers || {});
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(path, Object.assign({}, init, { headers }));
+    if (res.status === 401) {
+      token = '';
+      sessionStorage.removeItem(TOKEN_KEY);
+      throw Object.assign(new Error('需要访问密码或登录已失效'), { status: 401 });
+    }
+    return res;
+  }
+
+  function cleanupSession() {
+    clearInterval(pingTimer); pingTimer = null;
+    clearInterval(statsTimer); statsTimer = null;
+    if (inputCh) { try { inputCh.close(); } catch {} inputCh = null; }
+    if (pc) { try { pc.close(); } catch {} pc = null; }
+    if (ws) { try { ws.close(); } catch {} ws = null; }
+    videoStream = null;
+    audioStream = null;
+    video.srcObject = null;
+    audioEl.srcObject = null;
+  }
+
+  async function boot() {
+    cleanupSession();
+    showOverlay('穿云投屏 · 单机直连', '正在探测设备信息…');
+    try {
+      const pingRes = await fetch('/api/standalone/ping');
+      const ping = await pingRes.json();
+      authRequired = !!ping.auth_required;
+      deviceId = ping.device_id || '';
+      isProjection = ping.mode === 'projection';
+      btnLogout.style.display = authRequired && token ? 'inline-flex' : 'none';
+      if (authRequired && !token) {
+        showOverlay('需要直连密码', '请输入被控端设置的单机直连访问密码。', { login: true });
+        return;
+      }
+      await loadDeviceAndConnect();
+    } catch (e) {
+      showOverlay('连接失败', '无法连接到设备：' + (e.message || e), { retry: true });
+      setStatus('err', '连接失败');
+    }
+  }
+
+  async function loadDeviceAndConnect() {
+    try {
+      const res = await apiFetch('/devices');
+      const list = await res.json();
+      if (!Array.isArray(list) || list.length === 0) {
+        throw new Error('未检测到可用设备');
+      }
+      const dev = list[0];
+      deviceId = dev.device_id || deviceId;
+      deviceInfo = dev.device_info || {};
+      isProjection = isProjection || !!deviceInfo.projection_on_demand;
+      devNameEl.textContent = dev.alias || deviceInfo.model || deviceId || '单机设备';
+      modeBadge.textContent = isProjection ? '免 Root 录屏直连' : 'WebRTC 直连';
+      btnLogout.style.display = authRequired ? 'inline-flex' : 'none';
+      const hasCameras = !isProjection && Array.isArray(deviceInfo.cameras) && deviceInfo.cameras.length > 0;
+      btnSource.style.display = hasCameras ? 'inline-flex' : 'none';
+      $('btnPower').style.display = isProjection ? 'none' : 'inline-flex';
+      $('btnVolUp').style.display = isProjection ? 'none' : 'inline-flex';
+      $('btnVolDown').style.display = isProjection ? 'none' : 'inline-flex';
+      startSignaling();
+    } catch (e) {
+      if (e.status === 401) {
+        showOverlay('需要直连密码', '请输入被控端设置的单机直连访问密码。', { login: true, error: e.message });
+      } else {
+        showOverlay('获取设备失败', e.message || String(e), { retry: true });
+      }
+      setStatus('err', '连接失败');
+    }
+  }
+
+  function startSignaling() {
+    cleanupSession();
+    setStatus('warn', '正在建立信令通道…');
+    showOverlay('正在连接', '正在建立加密直连通道…');
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const qs = token ? ('?token=' + encodeURIComponent(token)) : '';
+    ws = new WebSocket(proto + '//' + location.host + '/connect_client' + qs);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'connect', device_id: deviceId }));
+      pingTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+      }, 20000);
+    };
+
+    ws.onmessage = async ev => {
+      if (typeof ev.data !== 'string') return;
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      const mType = msg.message_type || msg.type;
+      if (mType === 'pong') return;
+      if (mType === 'device_info' && msg.device_info) {
+        deviceInfo = msg.device_info;
+        return;
+      }
+      if (mType === 'config') {
+        setupPeerConnection(msg.ice_servers || []);
+        const opts = {
+          video: true,
+          audio: !isProjection,
+          video_source: videoSource,
+          max_size: 1280,
+          max_fps: 30,
+          bitrate: 2500000,
+          video_codec_options: 'profile=1'
+        };
+        ws.send(JSON.stringify({ type: 'forward', payload: { type: 'request-offer', scrcpy_options: opts } }));
+        setStatus('warn', isProjection ? '等待被控手机确认共享屏幕…' : '正在协商视频流…');
+        if (isProjection) {
+          showOverlay('等待手机确认', '请在被控手机上点击「立即开始」同意屏幕共享（或开启亮屏无人值守）。');
+        }
+        return;
+      }
+      if (mType === 'error') {
+        showOverlay('连接出错', msg.error || msg.reason || '未知错误', { retry: true });
+        setStatus('err', '连接出错');
+        return;
+      }
+      if ((mType === 'forward' || mType === 'device_msg') && msg.payload) {
+        await handleForward(msg.payload);
+      }
+    };
+
+    ws.onerror = () => {
+      setStatus('err', '信令通道异常');
+    };
+
+    ws.onclose = () => {
+      clearInterval(pingTimer);
+      if (overlay.classList.contains('hidden')) {
+        showOverlay('连接已断开', '与被控设备的直连已关闭。', { retry: true });
+      }
+      setStatus('err', '已断开');
+    };
+  }
+
+  function setupPeerConnection(iceServers) {
+    if (pc) { try { pc.close(); } catch {} }
+    videoStream = new MediaStream();
+    audioStream = new MediaStream();
+    video.muted = true;
+    video.srcObject = videoStream;
+    audioEl.srcObject = audioStream;
+    pc = new RTCPeerConnection({ iceServers: Array.isArray(iceServers) ? iceServers : [] });
+    pc.ontrack = ev => {
+      if (ev.track.kind === 'video') {
+        if (!videoStream.getTracks().some(t => t.id === ev.track.id)) {
+          videoStream.addTrack(ev.track);
+        }
+        video.srcObject = videoStream;
+        video.muted = true;
+        video.play().catch(() => {});
+        hideOverlay();
+        setStatus('ok', '已连接 · 画面传输中');
+      } else if (ev.track.kind === 'audio') {
+        if (!audioStream.getTracks().some(t => t.id === ev.track.id)) {
+          audioStream.addTrack(ev.track);
+        }
+        audioEl.srcObject = audioStream;
+        audioEl.play().catch(() => {});
+      }
+    };
+    pc.ondatachannel = ev => {
+      if (ev.channel.label === 'input-channel') {
+        inputCh = ev.channel;
+      }
+    };
+    pc.onicecandidate = ev => {
+      if (ev.candidate && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'forward', payload: { type: 'ice-candidate', candidate: ev.candidate } }));
+      }
+    };
+    pc.oniceconnectionstatechange = () => {
+      const st = pc.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
+        hideOverlay();
+        startStatsLoop();
+      } else if (st === 'failed' || st === 'closed') {
+        showOverlay('WebRTC 连接中断', 'P2P 通道已断开（状态：' + st + '）。', { retry: true });
+        setStatus('err', '连接中断');
+      }
+    };
+  }
+
+  async function handleForward(payload) {
+    if (payload.type === 'projection_status') {
+      const map = {
+        waiting: ['等待手机确认', '请在被控手机上允许屏幕共享…', false],
+        rejected: ['共享已拒绝', '被控手机拒绝了本次屏幕共享请求。', true],
+        busy: ['设备忙碌', '被控手机正在被其他控制端共享或等待确认。', true],
+        expired: ['请求超时', '被控手机未在 60 秒内确认共享。', true],
+        ended: ['共享已结束', '被控手机已停止屏幕共享。', true],
+        failed: ['共享失败', '系统录屏或推流失败，请重试。', true],
+        unattended_denied: ['无人值守受限', '当前连接不允许使用无人值守模式。', true]
+      };
+      const entry = map[payload.state] || ['状态变更', '录屏状态：' + payload.state, true];
+      showOverlay(entry[0], entry[1], { retry: entry[2] });
+      setStatus(entry[2] ? 'err' : 'warn', entry[0]);
+      return;
+    }
+    if (payload.type === 'offer' && pc) {
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: payload.sdp }));
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      ws.send(JSON.stringify({ type: 'forward', payload: { type: 'answer', sdp: ans.sdp } }));
+      return;
+    }
+    if (payload.type === 'ice-candidate' && payload.candidate && pc) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(payload.candidate)); } catch {}
+    }
+  }
+
+  function startStatsLoop() {
+    clearInterval(statsTimer);
+    lastBytes = 0; lastTs = 0;
+    statsTimer = setInterval(async () => {
+      if (!pc) return;
+      try {
+        const stats = await pc.getStats();
+        let fps = 0, kbps = 0, rttMs = 0;
+        stats.forEach(r => {
+          if (r.type === 'inbound-rtp' && r.kind === 'video') {
+            if (r.framesPerSecond) fps = Math.round(r.framesPerSecond);
+            if (lastTs && r.timestamp > lastTs && r.bytesReceived >= lastBytes) {
+              kbps = Math.round(((r.bytesReceived - lastBytes) * 8) / (r.timestamp - lastTs));
+            }
+            lastBytes = r.bytesReceived || 0;
+            lastTs = r.timestamp || 0;
+          } else if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.currentRoundTripTime != null) {
+            rttMs = Math.round(r.currentRoundTripTime * 1000);
+          }
+        });
+        const w = video.videoWidth || 0, h = video.videoHeight || 0;
+        setStatus('ok', `${rttMs}ms · ${fps}fps · ${kbps} Kbps · ${w}×${h}`);
+      } catch {}
+    }, 1000);
+  }
+
+  function sendInput(obj) {
+    if (inputCh && inputCh.readyState === 'open') {
+      inputCh.send(JSON.stringify(obj));
+      return true;
+    }
+    return false;
+  }
+
+  function getLogicalSize() {
+    const d = deviceInfo && Array.isArray(deviceInfo.displays) && deviceInfo.displays[0];
+    let lw = (d && d.x_res) ? d.x_res : (video.videoWidth || 1080);
+    let lh = (d && d.y_res) ? d.y_res : (video.videoHeight || 1920);
+    if (video.videoWidth && video.videoHeight) {
+      const vLand = video.videoWidth > video.videoHeight;
+      const lLand = lw > lh;
+      if (vLand !== lLand) { const tmp = lw; lw = lh; lh = tmp; }
+    }
+    return { w: lw, h: lh };
+  }
+
+  function mapPoint(clientX, clientY) {
+    const rect = video.getBoundingClientRect();
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if (!rect.width || !rect.height || !vw || !vh) return null;
+    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const rw = vw * scale, rh = vh * scale;
+    const ox = rect.left + (rect.width - rw) / 2;
+    const oy = rect.top + (rect.height - rh) / 2;
+    const nx = (clientX - ox) / rw;
+    const ny = (clientY - oy) / rh;
+    if (nx < 0 || nx > 1 || ny < 0 || ny > 1) return null;
+    const logical = getLogicalSize();
+    return {
+      x: Math.round(nx * logical.w),
+      y: Math.round(ny * logical.h),
+      w: logical.w,
+      h: logical.h
+    };
+  }
+
+  function sendTouch(action, ev) {
+    const pt = mapPoint(ev.clientX, ev.clientY);
+    if (!pt) return;
+    sendInput({ type: 'touch', action, pointerId: ev.pointerId || 1, x: pt.x, y: pt.y, w: pt.w, h: pt.h });
+  }
+
+  video.addEventListener('pointerdown', ev => {
+    if (ev.button === 2) {
+      ev.preventDefault();
+      sendNavKey(4);
+      return;
+    }
+    video.setPointerCapture(ev.pointerId);
+    pointerDown = true;
+    sendTouch(0, ev);
+  });
+  video.addEventListener('pointermove', ev => {
+    if (!pointerDown) return;
+    sendTouch(2, ev);
+  });
+  const endTouch = ev => {
+    if (!pointerDown) return;
+    pointerDown = false;
+    sendTouch(1, ev);
+  };
+  video.addEventListener('pointerup', endTouch);
+  video.addEventListener('pointercancel', endTouch);
+  video.addEventListener('contextmenu', ev => ev.preventDefault());
+  video.addEventListener('wheel', ev => {
+    const pt = mapPoint(ev.clientX, ev.clientY);
+    if (!pt) return;
+    ev.preventDefault();
+    sendInput({ type: 'inject_scroll', x: pt.x, y: pt.y, w: pt.w, h: pt.h, hscroll: 0, vscroll: ev.deltaY > 0 ? -1 : 1 });
+  }, { passive: false });
+
+  function sendNavKey(code) {
+    if (!sendInput({ type: 'inject_keycode', keycode: code, action: 0 })) {
+      if (isProjection && ws && ws.readyState === WebSocket.OPEN && (code === 3 || code === 4 || code === 187)) {
+        ws.send(JSON.stringify({ type: 'command', device_id: deviceId, command: 'input keyevent ' + code }));
+      }
+      return;
+    }
+    setTimeout(() => sendInput({ type: 'inject_keycode', keycode: code, action: 1 }), 40);
+  }
+
+  document.querySelectorAll('.toolbar button[data-key]').forEach(btn => {
+    btn.addEventListener('click', () => sendNavKey(Number(btn.dataset.key)));
+  });
+
+  function sendText() {
+    const input = $('textInput');
+    const txt = input.value;
+    if (!txt) return;
+    if (sendInput({ type: 'inject_text', text: txt })) {
+      input.value = '';
+      showToast('已发送文本');
+    } else {
+      showToast('控制通道未就绪');
+    }
+  }
+  $('btnSendText').addEventListener('click', sendText);
+  $('textInput').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); sendText(); } });
+
+  btnAudio.addEventListener('click', () => {
+    audioEl.muted = !audioEl.muted;
+    btnAudio.textContent = audioEl.muted ? '🔇 静音' : '🔊 声音开';
+    if (!audioEl.muted) audioEl.play().catch(() => {});
+  });
+
+  btnSource.addEventListener('click', () => {
+    videoSource = videoSource === 'display' ? 'camera' : 'display';
+    btnSource.textContent = videoSource === 'display' ? '📷 摄像头' : '📱 屏幕';
+    startSignaling();
+  });
+
+  $('btnFullscreen').addEventListener('click', () => {
+    if (!document.fullscreenElement) stage.requestFullscreen?.().catch(() => {});
+    else document.exitFullscreen?.().catch(() => {});
+  });
+
+  $('btnReconnect').addEventListener('click', () => boot());
+  $('ovRetry').addEventListener('click', () => boot());
+
+  btnLogout.addEventListener('click', () => {
+    token = '';
+    sessionStorage.removeItem(TOKEN_KEY);
+    boot();
+  });
+
+  loginForm.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    errMsg.textContent = '';
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'direct', password: pwdInput.value })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) {
+        errMsg.textContent = data.error || '密码错误';
+        return;
+      }
+      token = data.token;
+      sessionStorage.setItem(TOKEN_KEY, token);
+      pwdInput.value = '';
+      await loadDeviceAndConnect();
+    } catch (e) {
+      errMsg.textContent = '请求失败：' + (e.message || e);
+    }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

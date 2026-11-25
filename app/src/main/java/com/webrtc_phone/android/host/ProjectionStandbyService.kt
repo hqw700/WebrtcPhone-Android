@@ -97,6 +97,7 @@ class ProjectionStandbyService : Service() {
 
     private val main = Handler(Looper.getMainLooper())
     private var closing = false
+    private var standaloneServer: StandaloneProjectionServer? = null
     private val notifications get() = getSystemService(NotificationManager::class.java)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -108,20 +109,53 @@ class ProjectionStandbyService : Service() {
         }
         if (signaling != null) return START_NOT_STICKY
         try {
-            showStandbyNotification()
             val prefs = HostConfig.load(this)
+            showStandbyNotification(prefs.standalone, prefs.standalonePort)
             check(prefs.runMode == RunMode.PROJECTION && !AgentHostService.isServiceRunning)
-            val endpoint = requireNotNull(ServerEndpoint.parse(prefs.signalingUrl)) { "请填写有效的信令服务器地址" }
-            signaling = ProjectionSignaling(
-                container.httpFactory.webSocketFor(endpoint), endpoint, prefs, main,
-                { projectionDisplaySize(this) },
-                { online, message -> if (!closing) current.value = State(true, online, message, signaling?.unattended == true) },
-                ::publishRequest,
-                { ProjectionHostService.stop(this) },
-                ::requestCertificateConfirmation,
-                { message -> current.value = State(message = message); stopSelf() }
-            ).also { it.connect() }
+            if (prefs.standalone) {
+                require(prefs.standalonePort in 1024..65535) { "直连监听端口需在 1024 ~ 65535 之间" }
+                val pwd = prefs.standalonePassword
+                val sig = ProjectionSignaling(
+                    http = null,
+                    endpoint = null,
+                    prefs = prefs,
+                    handler = main,
+                    displaySize = { projectionDisplaySize(this) },
+                    status = { online, message -> if (!closing) current.value = State(true, online, message, signaling?.unattended == true) },
+                    publishRequest = ::publishRequest,
+                    stopCapture = { ProjectionHostService.stop(this) },
+                    confirmCertificate = ::requestCertificateConfirmation,
+                    fatal = { message -> current.value = State(message = message); stopSelf() },
+                    localSender = { msg -> standaloneServer?.sendFromProjection(msg) },
+                )
+                val srv = StandaloneProjectionServer(
+                    context = this,
+                    port = prefs.standalonePort,
+                    password = pwd,
+                    prefs = prefs,
+                    displaySize = { projectionDisplaySize(this) },
+                    onSignalingMessage = { msg -> sig.receiveLocal(msg) },
+                    onClientDisconnected = { cid -> sig.clientDisconnectedLocal(cid) },
+                )
+                srv.start()
+                standaloneServer = srv
+                signaling = sig
+                sig.connect()
+            } else {
+                val endpoint = requireNotNull(ServerEndpoint.parse(prefs.signalingUrl)) { "请填写有效的信令服务器地址" }
+                signaling = ProjectionSignaling(
+                    container.httpFactory.webSocketFor(endpoint), endpoint, prefs, main,
+                    { projectionDisplaySize(this) },
+                    { online, message -> if (!closing) current.value = State(true, online, message, signaling?.unattended == true) },
+                    ::publishRequest,
+                    { ProjectionHostService.stop(this) },
+                    ::requestCertificateConfirmation,
+                    { message -> current.value = State(message = message); stopSelf() }
+                ).also { it.connect() }
+            }
         } catch (e: Exception) {
+            standaloneServer?.stop()
+            standaloneServer = null
             current.value = State(message = "待协助启动失败：${e.message}")
             stopSelf()
         }
@@ -129,14 +163,16 @@ class ProjectionStandbyService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun showStandbyNotification() {
+    private fun showStandbyNotification(standalone: Boolean = false, port: Int = HostConfig.DEFAULT_STANDALONE_PORT) {
         if (Build.VERSION.SDK_INT >= 26) {
             notifications.createNotificationChannel(NotificationChannel(STANDBY_CHANNEL, "在线待协助", NotificationManager.IMPORTANCE_LOW))
             notifications.createNotificationChannel(NotificationChannel(REQUEST_CHANNEL, "远程协助请求", NotificationManager.IMPORTANCE_HIGH))
         }
         val stop = PendingIntent.getService(this, 0, Intent(this, javaClass).setAction(STOP), PendingIntent.FLAG_IMMUTABLE)
-        val notification = builder(STANDBY_CHANNEL).setContentTitle("WebrtcPhone 在线待协助")
-            .setContentText("等待管理台发起投屏请求").setOngoing(true)
+        val notification = builder(STANDBY_CHANNEL)
+            .setContentTitle(if (standalone) "WebrtcPhone 单机录屏直连 (:$port)" else "WebrtcPhone 在线待协助")
+            .setContentText(if (standalone) "支持 App 单机直连或浏览器直接访问" else "等待管理台发起投屏请求")
+            .setOngoing(true)
             .addAction(Notification.Action.Builder(null, "停止待命", stop).build()).build()
         if (Build.VERSION.SDK_INT >= 34) startForeground(STANDBY_NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(STANDBY_NOTIFICATION, notification)
@@ -184,6 +220,8 @@ class ProjectionStandbyService : Service() {
         val old = signaling
         signaling = null
         old?.close()
+        standaloneServer?.stop()
+        standaloneServer = null
         publishRequest(null)
         pendingCertificate.value = null
         notifications.cancel(CERTIFICATE_NOTIFICATION)

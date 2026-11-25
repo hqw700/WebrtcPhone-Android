@@ -50,9 +50,10 @@
 
 ## host
 
-- `HostConfig`：受控端运行配置（Root/Shizuku 执行模式、自启、设备 ID、ICE 服务器、独立单机开关 `standalone`、监听端口 `standalonePort`）；直连访问密码独立保存于 `SecureStore`。
+- `HostConfig`：受控端运行配置（Root/Shizuku/系统录屏执行模式、自启、设备 ID、ICE 服务器、独立单机开关 `standalone`、监听端口 `standalonePort`）；直连访问密码独立保存于 `SecureStore`。
 - `AgentController`：校验并释放内置 `cloudphone-agent` 与 `libsys_core.so`，构建启动命令（单机模式传入 `-standalone -listen ':<port>'`，密码仅经 `CP_AGENT_STANDALONE_PASSWORD` 环境变量注入），通过 Root 或 Shizuku 拉起/停止并采集运行状态与日志。
-- `HostViewModel` / `HostScreen`：提供「信令服务器模式 / 独立单机模式 (免信令)」切换、枚举本机 Wi-Fi/热点/VPN 地址供控制端一键复制直连，并在运行时锁定配置。
+- `StandaloneProjectionServer` / `ProjectionStandbyService` / `ProjectionSignaling`：免 Root/ADB 系统录屏单机模式，使用 `AndroidKeyStore` 持久化 ECDSA P-256 自签证书 + `SSLServerSocket` 与原生 RFC 6455 WebSocket 提供与 Agent 对齐的 `/api/standalone/ping`、`/api/login`、`/devices`、`/connect_client` 及内嵌 `assets/standalone_ui.html` 浏览器直控页面。
+- `HostViewModel` / `HostScreen`：提供「信令服务器模式 / 独立单机模式 (免信令)」切换与 Root/Shizuku/系统录屏三引擎选择、枚举本机 Wi-Fi/热点/VPN 地址供控制端 App 或浏览器一键访问，并在运行时锁定配置。
 
 ## rtc
 

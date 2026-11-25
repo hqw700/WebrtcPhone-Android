@@ -89,6 +89,7 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         if (_state.value.prefs.runMode == RunMode.PROJECTION) {
             val projection = ProjectionStandbyService.state.value
+            val localIp = getLocalIpAddress()
             _state.update {
                 if (it.prefs.runMode != RunMode.PROJECTION) it else it.copy(
                     status = when {
@@ -98,7 +99,12 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                     },
                     serviceRunning = projection.active,
                     agentPid = "",
-                    logs = projection.message.ifBlank { "开启在线待协助后，可从管理台发起请求" }
+                    localIp = localIp,
+                    directEndpoints = listDirectEndpoints(it.prefs.standalonePort),
+                    logs = projection.message.ifBlank {
+                        if (it.prefs.standalone) "开启单机录屏待命后，可由另一台手机或浏览器直接访问"
+                        else "开启在线待协助后，可从管理台发起请求"
+                    }
                 )
             }
             return
@@ -145,16 +151,8 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         if (AgentHostService.isServiceRunning || ProjectionStandbyService.state.value.active || _state.value.isBusy) return
         val previous = _state.value.prefs
         val requested = transform(previous)
-        val normalizedMode = if (requested.standalone && requested.runMode == RunMode.PROJECTION) {
-            if (AgentController.checkShizukuStatus() == AgentController.ShizukuStatus.RUNNING_AND_GRANTED &&
-                _state.value.rootStatus != AgentController.RootStatus.GRANTED
-            ) RunMode.SHIZUKU else RunMode.ROOT
-        } else {
-            requested.runMode
-        }
         val updated = requested.copy(
-            runMode = normalizedMode,
-            autoStart = requested.autoStart && normalizedMode == RunMode.ROOT,
+            autoStart = requested.autoStart && requested.runMode == RunMode.ROOT,
         )
         HostConfig.save(getApplication(), updated)
         _state.update {
@@ -190,7 +188,13 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startProjectionStandby() {
         if (_state.value.isBusy || AgentHostService.isServiceRunning || ProjectionStandbyService.state.value.active) return
-        if (ServerEndpoint.parse(_state.value.prefs.signalingUrl) == null) {
+        val prefs = _state.value.prefs
+        if (prefs.standalone) {
+            if (prefs.standalonePort !in 1024..65535) {
+                _state.update { it.copy(errorMessage = "直连监听端口需在 1024 ~ 65535 之间") }
+                return
+            }
+        } else if (ServerEndpoint.parse(prefs.signalingUrl) == null) {
             _state.update { it.copy(errorMessage = "请填写有效的信令服务器地址") }
             return
         }

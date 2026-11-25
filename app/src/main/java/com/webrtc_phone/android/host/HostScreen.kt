@@ -299,7 +299,7 @@ fun HostScreen(
                                     Icon(Icons.Outlined.PhonelinkSetup, null, tint = AppColors.Brand, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        "手机直连地址（另一台手机选择“单机直连”输入）",
+                                        "手机/网页直连地址（App“单机直连”或浏览器访问 https://IP:端口）",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.SemiBold,
                                         color = AppColors.Brand
@@ -463,20 +463,29 @@ fun HostScreen(
                                 selectedLabelColor = AppColors.Brand
                             )
                         )
-                        if (!state.prefs.standalone) {
-                            FilterChip(
-                                enabled = !state.serviceRunning && !state.isBusy,
-                                selected = state.prefs.runMode == RunMode.PROJECTION,
-                                onClick = { vm.updatePrefs { it.copy(runMode = RunMode.PROJECTION) } },
-                                label = { Text("系统录屏（免 ADB / Root）") }
+                        FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            selected = state.prefs.runMode == RunMode.PROJECTION,
+                            onClick = { vm.updatePrefs { it.copy(runMode = RunMode.PROJECTION) } },
+                            label = { Text("系统录屏（免 ADB / Root）") },
+                            leadingIcon = if (state.prefs.runMode == RunMode.PROJECTION) {
+                                { Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AppColors.Brand.copy(alpha = 0.2f),
+                                selectedLabelColor = AppColors.Brand
                             )
-                        }
+                        )
                     }
 
                     Spacer(Modifier.height(6.dp))
                     Text(
                         when (state.prefs.runMode) {
-                            RunMode.PROJECTION -> "开启后在管理台显示在线。收到请求后在本机确认共享，锁屏结束共享后会回到待命。"
+                            RunMode.PROJECTION -> if (state.prefs.standalone) {
+                                "免 Root/ADB 单机模式：开启后本机直接监听 HTTPS/WSS 端口，支持另一台手机 App 或浏览器直连；收到请求后在本机确认共享（也可开启亮屏无人值守）。"
+                            } else {
+                                "开启后在管理台显示在线。收到请求后在本机确认共享，锁屏结束共享后会回到待命。"
+                            }
                             RunMode.ROOT -> "Root 模式：利用常驻 su 会话调用，需要设备已刷入 Magisk / KernelSU / APatch。"
                             RunMode.SHIZUKU -> "Shizuku 模式：通过 ADB 无线调试或已启动的 Shizuku 服务运行，无需解锁 Root。"
                         },

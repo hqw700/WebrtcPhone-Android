@@ -460,3 +460,32 @@ class AdminLeaseAndUsersTest {
         assertEquals(2, st.allLeasesByUser["user1"]?.size)
     }
 }
+
+class StandaloneProjectionServerTest {
+    @Test fun webSocketAcceptMatchesRfc6455Vector() {
+        assertEquals(
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+            com.webrtc_phone.android.host.StandaloneProjectionServer.computeWebSocketAccept("dGhlIHNhbXBsZSBub25jZQ==")
+        )
+    }
+
+    @Test fun extractsBearerAndQueryTokens() {
+        val srv = com.webrtc_phone.android.host.StandaloneProjectionServer
+        assertEquals("abc123", srv.extractToken("Bearer abc123", ""))
+        assertEquals("tok+1", srv.extractToken(null, "foo=1&token=tok%2B1&bar=2"))
+        assertNull(srv.extractToken(null, "foo=1"))
+        assertTrue(srv.constantTimeEquals("secret", "secret"))
+        assertFalse(srv.constantTimeEquals("secret", "secreX"))
+    }
+
+    @Test fun parsesIceServersToClientJson() {
+        val arr = com.webrtc_phone.android.host.StandaloneProjectionServer.parseIceServersJson(
+            "turn:u1:p1@1.2.3.4:3478?transport=udp,stun:1.2.3.4:3478"
+        )
+        assertEquals(2, arr.length())
+        assertEquals("turn:1.2.3.4:3478?transport=udp", arr.getJSONObject(0).getJSONArray("urls").getString(0))
+        assertEquals("u1", arr.getJSONObject(0).getString("username"))
+        assertEquals("p1", arr.getJSONObject(0).getString("credential"))
+        assertEquals("stun:1.2.3.4:3478", arr.getJSONObject(1).getJSONArray("urls").getString(0))
+    }
+}

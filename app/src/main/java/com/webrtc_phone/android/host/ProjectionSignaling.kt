@@ -32,8 +32,8 @@ import java.util.concurrent.Executor
 
 /** WebSocket、PeerConnection 和手势状态统一在服务线程上更新。 */
 internal class ProjectionSignaling(
-    private val http: OkHttpClient,
-    private val endpoint: ServerEndpoint,
+    private val http: OkHttpClient?,
+    private val endpoint: ServerEndpoint?,
     private val prefs: HostPreferences,
     private val handler: Handler,
     private val displaySize: () -> Pair<Int, Int>,
@@ -42,6 +42,7 @@ internal class ProjectionSignaling(
     private val stopCapture: () -> Unit,
     private val confirmCertificate: (UntrustedCertificateInfo) -> Unit,
     private val fatal: (String) -> Unit,
+    private val localSender: ((JSONObject) -> Unit)? = null,
 ) {
     private data class Invitation(
         val clientId: Long,
@@ -67,7 +68,9 @@ internal class ProjectionSignaling(
     private var capture: Capture? = null
     private var unattendedTicket: String? = null
     val unattended get() = capture?.unattended == true
-    private val trustedSignaling = endpoint.secure || endpoint.host in setOf("localhost", "127.0.0.1", "::1")
+    private val isLocalStandalone get() = localSender != null
+    private val trustedSignaling = isLocalStandalone || endpoint?.secure == true ||
+        endpoint?.host in setOf("localhost", "127.0.0.1", "::1")
     private val expire = Runnable {
         invitation?.let { reject(it.ticket, "expired") }
     }
@@ -86,10 +89,18 @@ internal class ProjectionSignaling(
     }
 
     fun connect() {
-        if (closed || socket != null) return
+        if (closed) return
+        if (isLocalStandalone) {
+            registered = true
+            status(true, if (unattended) "亮屏无人值守 · 单机待命 :${prefs.standalonePort}" else "单机录屏待命 · :${prefs.standalonePort}")
+            return
+        }
+        val client = http ?: return
+        val target = endpoint ?: return
+        if (socket != null) return
         status(false, "正在连接信令服务器")
-        socket = http.newWebSocket(
-            Request.Builder().url(endpoint.wsUrl("/register_agent")).build(),
+        socket = client.newWebSocket(
+            Request.Builder().url(target.wsUrl("/register_agent")).build(),
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     handler.post { if (socket === webSocket) register() }
@@ -214,7 +225,8 @@ internal class ProjectionSignaling(
                         }
                         val ticket = UUID.randomUUID().toString()
                         invitation = Invitation(id, ticket, control, owner, resumeKey, bitrate)
-                        val requester = message.optString("projection_requester").take(120).ifBlank { "管理台用户" }
+                        val defaultRequester = if (isLocalStandalone) "单机直连控制端" else "管理台用户"
+                        val requester = message.optString("projection_requester").take(120).ifBlank { defaultRequester }
                         publishRequest(ProjectionStandbyService.Request(ticket, requester, control))
                         sendStatus(id, "waiting")
                         handler.postDelayed(expire, 60_000)
@@ -234,8 +246,24 @@ internal class ProjectionSignaling(
         }
     }
 
+    fun receiveLocal(message: JSONObject) {
+        handler.post {
+            if (!closed && isLocalStandalone) receive(message)
+        }
+    }
+
+    fun clientDisconnectedLocal(clientId: Long) {
+        handler.post {
+            if (!closed && isLocalStandalone) {
+                receive(JSONObject().put("type", "client_disconnected").put("client_id", clientId))
+            }
+        }
+    }
+
     private fun send(message: JSONObject) {
-        socket?.send(message.toString())
+        val local = localSender
+        if (local != null) local(message)
+        else socket?.send(message.toString())
     }
 
     private fun reconnect(connection: WebSocket, message: String) {

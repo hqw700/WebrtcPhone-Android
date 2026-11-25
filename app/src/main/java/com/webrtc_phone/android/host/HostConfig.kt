@@ -62,8 +62,7 @@ object HostConfig {
             editor.commit()
         }
         val standalone = sp.getBoolean(KEY_STANDALONE, false)
-        val rawMode = RunMode.fromString(sp.getString(KEY_RUN_MODE, "root"))
-        val effectiveMode = if (standalone && rawMode == RunMode.PROJECTION) RunMode.ROOT else rawMode
+        val effectiveMode = RunMode.fromString(sp.getString(KEY_RUN_MODE, "root"))
         val port = sp.getInt(KEY_STANDALONE_PORT, DEFAULT_STANDALONE_PORT).takeIf { it in 1024..65535 } ?: DEFAULT_STANDALONE_PORT
         val password = runCatching { secureStore(context)?.getString(SECURE_KEY_STANDALONE_PWD) }.getOrNull().orEmpty()
         return HostPreferences(
@@ -80,7 +79,7 @@ object HostConfig {
     }
 
     fun save(context: Context, prefs: HostPreferences) {
-        val effectiveMode = if (prefs.standalone && prefs.runMode == RunMode.PROJECTION) RunMode.ROOT else prefs.runMode
+        val effectiveMode = prefs.runMode
         val port = prefs.standalonePort.takeIf { it in 1024..65535 } ?: DEFAULT_STANDALONE_PORT
         getPrefs(context).edit()
             .putString(KEY_SIGNALING, prefs.signalingUrl)

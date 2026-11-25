@@ -2,6 +2,14 @@
 
 本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
 
+## 2026-11-25 单机模式支持浏览器网页访问与免 Root/ADB 系统录屏直连
+
+- **内嵌单页 Web 控制台 (`standalone_ui.html`)**：在 `cloudphone-agent`（`//go:embed`）与 `app/WebrtcPhone`（`assets/standalone_ui.html`）同步内嵌零依赖 WebRTC 直控页面（约 23 KB），支持浏览器访问 `https://<手机IP>:<端口>/` 自动探测免密/口令登录、WebRTC 音视频、触控/滚轮/导航键/文本下发、录屏状态提示与摄像头切换。
+- **免 Root / 免 ADB 系统录屏单机模式 (`StandaloneProjectionServer.kt`)**：新增基于 `AndroidKeyStore` 持久化 ECDSA P-256 自签证书 + `SSLServerSocket` + 原生 RFC 6455 WebSocket 的轻信令服务端，接入 `ProjectionStandbyService` / `ProjectionSignaling` 并放开 `HostConfig` / `HostViewModel` / `HostScreen` 的单机录屏选项，完整复用 `MediaProjection` 录屏、无障碍手势注入与亮屏无人值守。
+- **测试与真机验证（`28301FDH300F49`，Pixel 7 Pro Android 15）**：
+  - Go 单测 `25/25` 通过并重新同步全架构 Agent 二进制；Android JVM 单测 `64/64`（新增 `StandaloneProjectionServerTest`）与 R8 Release APK 构建通过；
+  - 真机实测 Agent 单机模式 `GET https://192.168.100.232:8443/` 返回 `HTTP/2 200` `text/html`；切换至「系统录屏（免 ADB / Root）+ 独立单机模式」后实测 `AndroidKeyStore` TLS 握手、`/api/standalone/ping`（`"mode":"projection"`）、`/devices`（`"projection_on_demand":true`）、`GET /`（23,365 字节 HTML）及 RFC 6455 WSS `/connect_client`（`101` + `config` + `device_info` + `pong`）全部通过，`logcat -b crash` 零崩溃。
+
 ## 2026-11-25 单 Agent 独立单机模式（免信令手机对手机直连）
 
 - **Agent 内嵌轻信令 (`android-agentd/cloudphone-agent/standalone.go`)**：新增 `-standalone`（默认监听 `:8443`）、`-listen`、`-standalone-tls`、`-standalone-cert`/`-standalone-key`、`-standalone-password`（推荐 `CP_AGENT_STANDALONE_PASSWORD` 环境变量）等参数与 `CP_AGENT_*` 配置绑定。支持持久化 ECDSA P-256 自签证书（Root 创建时自动 `chown 2000:2000` 兼容切换至 Shizuku）、常量时间访问口令校验（未认证请求 `/devices`、`/connect_client` 返回 `401`）、`/api/standalone/ping`、`/devices`、`/snapshots/<id>.jpg`（`ETag`/`304`）、`WS /connect_client` 完整信令转发与二进制 `PREV` 预览推流。`go test -v ./...` 全部 24 个测试通过，并交叉编译同步 `arm64`/`armeabi-v7a`/`amd64` 资产至 `app/src/main/assets/`。
