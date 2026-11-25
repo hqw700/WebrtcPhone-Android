@@ -22,8 +22,10 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Screenshot
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VolumeDown
 import androidx.compose.material.icons.outlined.VolumeUp
+import com.webrtc_phone.android.rtc.CameraParams
 import com.webrtc_phone.android.rtc.channel.Keys
 
 /** 工具面板内容；按会话权限动态禁用 */
@@ -80,6 +82,14 @@ fun toolSections(
         "画面与连接" to listOfNotNull(
             if (vm.canSwitchDevices) ToolItem("切换设备", Icons.Outlined.SwapHoriz, true) { vm.openDrawer() } else null,
             ToolItem("画质", Icons.Outlined.HighQuality, true) { vm.panel = Panel.QUALITY },
+            if (!t.isCamera && !ws && !projection && !t.isGuest) ToolItem(
+                "摄像头监控",
+                Icons.Outlined.Videocam,
+                true,
+            ) {
+                close()
+                vm.switchCamera(CameraParams())
+            } else null,
             // 传输切换：WS ⇄ WebRTC（分享访客只能用进入时的方式，不提供切换）
             if (!t.isGuest && !projection) ToolItem(
                 if (ws) "切到 WebRTC" else "切到 WS 模式",

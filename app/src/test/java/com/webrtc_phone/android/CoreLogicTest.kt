@@ -393,6 +393,16 @@ class WsProtocolTest {
         assertEquals("touch", o.getJSONObject("event").getString("type"))
         assertEquals(10, o.getJSONObject("event").getInt("x"))
     }
+
+    @Test fun matchesLongTruncatedDeviceId() {
+        val longId = "AOSP_on_Cheetah-78e17f16-0321-4806-a7cb-1c3b2973c5a8"
+        val frame = buildPrev(longId, isKey = true, ptsUs = 100L, nalu = byteArrayOf(0, 0, 0, 1, 0x65))
+        val parsed = WsProtocol.parsePrev(frame)!!
+        assertEquals(32, parsed.deviceId.toByteArray(Charsets.UTF_8).size)
+        assertTrue(WsProtocol.matchesDeviceId(parsed.deviceId, longId))
+        assertFalse(WsProtocol.matchesDeviceId(parsed.deviceId, "other-device-id"))
+        assertFalse(WsProtocol.matchesDeviceId("dev-01", "dev-01-extra"))
+    }
 }
 
 class AdminLeaseAndUsersTest {

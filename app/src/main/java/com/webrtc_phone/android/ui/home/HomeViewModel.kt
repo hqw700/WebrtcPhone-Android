@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.webrtc_phone.android.AppContainer
 import com.webrtc_phone.android.core.net.ApiException
 import com.webrtc_phone.android.core.net.ServerEndpoint
+import com.webrtc_phone.android.core.net.UntrustedCertificateInfo
+import com.webrtc_phone.android.data.auth.SessionRepository
 import com.webrtc_phone.android.data.model.AuthSession
 import com.webrtc_phone.android.data.model.Device
 import com.webrtc_phone.android.data.model.TagsPayload
@@ -13,6 +15,9 @@ import com.webrtc_phone.android.rtc.CameraParams
 import com.webrtc_phone.android.rtc.StreamAuth
 import com.webrtc_phone.android.rtc.StreamMode
 import com.webrtc_phone.android.rtc.StreamTarget
+import com.webrtc_phone.android.rtc.StreamTransport
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -53,6 +58,16 @@ data class DeviceFilter(
     }
 }
 
+data class DirectConnectUiState(
+    val open: Boolean = false,
+    val address: String = "",
+    val password: String = "",
+    val loading: Boolean = false,
+    val error: String? = null,
+    val untrusted: UntrustedCertificateInfo? = null,
+    val recent: List<SessionRepository.RecentDirectHost> = emptyList(),
+)
+
 /** 首页（设备 / 管理 / 我的）共享的会话级 ViewModel */
 class HomeViewModel(private val c: AppContainer, val session: AuthSession) : ViewModel() {
 
@@ -78,6 +93,94 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages = _messages.asSharedFlow()
+
+    private val _directConnect = MutableStateFlow(DirectConnectUiState())
+    val directConnect: StateFlow<DirectConnectUiState> = _directConnect.asStateFlow()
+
+    private val _directLaunch = MutableSharedFlow<StreamTarget>(extraBufferCapacity = 4)
+    val directLaunch = _directLaunch.asSharedFlow()
+
+    fun openDirectConnect() {
+        val recent = c.sessions.recentDirectHosts()
+        val last = recent.firstOrNull()
+        val addr = last?.url?.let { ServerEndpoint.parse(it)?.display }.orEmpty()
+        val pwd = last?.let { c.sessions.savedDirectPassword(it.url) }.orEmpty()
+        _directConnect.value = DirectConnectUiState(open = true, address = addr, password = pwd, recent = recent)
+    }
+
+    fun closeDirectConnect() {
+        _directConnect.value = DirectConnectUiState(open = false)
+    }
+
+    fun editDirectConnect(transform: (DirectConnectUiState) -> DirectConnectUiState) {
+        _directConnect.value = transform(_directConnect.value).copy(error = null)
+    }
+
+    fun pickRecentDirect(r: SessionRepository.RecentDirectHost) {
+        _directConnect.value = _directConnect.value.copy(
+            address = ServerEndpoint.parse(r.url)?.display ?: r.url,
+            password = c.sessions.savedDirectPassword(r.url).orEmpty(),
+            error = null,
+        )
+    }
+
+    fun connectDirect() {
+        val s = _directConnect.value
+        val ep = ServerEndpoint.parse(s.address)
+        if (ep == null) {
+            _directConnect.value = s.copy(error = "请输入有效的手机直连地址，如 192.168.1.20:8443")
+            return
+        }
+        if (s.loading) return
+        _directConnect.value = s.copy(loading = true, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val res = c.sessions.connectStandalone(ep, s.password)
+                if (s.password.isNotEmpty()) c.sessions.saveDirectPassword(ep.serialize(), s.password)
+                val target = StreamTarget(
+                    endpoint = ep,
+                    deviceId = res.device.id,
+                    deviceName = res.device.displayName,
+                    auth = StreamAuth.User(res.token),
+                    mode = StreamMode.Screen,
+                    settings = c.settings.stream.value,
+                    transport = StreamTransport.WEBRTC,
+                    displayHint = res.device.info.primaryDisplay?.let { it.width to it.height },
+                    standalone = true,
+                    initialDeviceInfo = res.device.info,
+                )
+                withContext(Dispatchers.Main) {
+                    _directConnect.value = DirectConnectUiState(open = false)
+                    _directLaunch.tryEmit(target)
+                }
+            } catch (e: ApiException.UntrustedCertificate) {
+                withContext(Dispatchers.Main) {
+                    _directConnect.value = _directConnect.value.copy(loading = false, untrusted = e.info)
+                }
+            } catch (e: ApiException) {
+                if (e is ApiException.Unauthorized) c.sessions.clearDirectPassword(ep.serialize())
+                withContext(Dispatchers.Main) {
+                    _directConnect.value = _directConnect.value.copy(loading = false, error = e.message ?: "直连失败")
+                }
+            }
+        }
+    }
+
+    fun trustDirectCertificate() {
+        val info = _directConnect.value.untrusted ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            c.pinStore.pin(info.endpointKey, info)
+            ServerEndpoint.parse(_directConnect.value.address)?.let { c.httpFactory.invalidate(it) }
+            withContext(Dispatchers.Main) {
+                _directConnect.value = _directConnect.value.copy(untrusted = null)
+                connectDirect()
+            }
+        }
+    }
+
+    fun dismissDirectCertificate() {
+        _directConnect.value = _directConnect.value.copy(untrusted = null, error = "已取消：证书未被信任")
+    }
 
     fun setFilter(transform: (DeviceFilter) -> DeviceFilter) {
         _filter.value = transform(_filter.value)

@@ -118,8 +118,8 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
     /** 复用登录会话的设备仓库（与首页同一份数据，含缩略图） */
     private val deviceRepo = c.userScope()?.devices
 
-    /** 只有登录用户能切换（需要设备列表权限） */
-    val canSwitchDevices: Boolean get() = deviceRepo != null && target.auth is StreamAuth.User
+    /** 只有登录且非单机直连用户能切换设备（需要信令设备列表） */
+    val canSwitchDevices: Boolean get() = !target.standalone && deviceRepo != null && target.auth is StreamAuth.User
 
     val devices: StateFlow<List<Device>> = deviceRepo?.devices ?: MutableStateFlow(emptyList())
     val snapshots: StateFlow<Map<String, Snapshot>> = deviceRepo?.snapshots ?: MutableStateFlow(emptyMap())
@@ -133,11 +133,11 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
     val serverFiles = c.userScope()?.serverFiles
 
     /**
-     * 是否可用服务器中转：登录用户 + 管理员。
+     * 是否可用服务器中转：登录用户 + 管理员 + 非单机直连。
      * 服务端 /api/tasks 的 install/push_file 为 admin-only，非 admin 即使上传了也无法下发，故整块入口仅对 admin 开放。
      */
     val canServerRelay: Boolean
-        get() = serverFiles != null && target.auth is StreamAuth.User &&
+        get() = !target.standalone && serverFiles != null && target.auth is StreamAuth.User &&
             c.sessions.session.value?.isAdmin == true
 
     /** 上传本地文件到服务器盘 */
@@ -398,6 +398,14 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
     fun switchCamera(params: CameraParams) {
         cameraZoom = 1f
         reconnectWith(target.copy(mode = StreamMode.Camera(params)))
+    }
+
+    fun switchToScreen() {
+        if (target.mode is StreamMode.Screen) return
+        cameraZoom = 1f
+        mirrored = false
+        toast("正在切回手机屏幕…")
+        reconnectWith(target.copy(mode = StreamMode.Screen))
     }
 
     val cameraParams: CameraParams? get() = (target.mode as? StreamMode.Camera)?.params

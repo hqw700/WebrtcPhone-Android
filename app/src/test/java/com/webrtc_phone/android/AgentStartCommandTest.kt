@@ -54,6 +54,41 @@ class AgentStartCommandTest {
         } finally { directory.delete() }
     }
 
+    @Test fun standaloneModeUsesListenFlagAndEnvPassword() {
+        val command = AgentController.buildAgentStartCommand(
+            signaling = "wss://ignored.example.com",
+            deviceId = "pixel-phone",
+            iceServers = "",
+            useShizuku = true,
+            standalone = true,
+            standalonePort = 9443,
+            standalonePassword = "p'w\$123",
+        )
+        assertTrue(command.contains(" -standalone -listen ':9443' "))
+        assertTrue(command.contains("export CP_AGENT_STANDALONE_PASSWORD="))
+        assertFalse(command.contains(" -signaling "))
+        assertFalse(command.contains("CP_AGENT_SIGNALING="))
+        // 密码绝不能出现在命令行二进制参数部分
+        val execSection = command.substringAfter(AgentController.AGENT_BIN_PATH)
+        assertFalse(execSection.contains("p'w\$123"))
+        assertShellSyntax(command)
+    }
+
+    @Test fun standaloneModeWithoutPasswordUnsetsEnv() {
+        val command = AgentController.buildAgentStartCommand(
+            signaling = "",
+            deviceId = "pixel-phone",
+            iceServers = "",
+            useShizuku = false,
+            standalone = true,
+            standalonePort = 8443,
+            standalonePassword = "",
+        )
+        assertTrue(command.contains("unset CP_AGENT_STANDALONE_PASSWORD;"))
+        assertTrue(command.contains(" -root -standalone -listen ':8443' "))
+        assertShellSyntax(command)
+    }
+
     private fun assertShellSyntax(command: String) {
         val process = ProcessBuilder("sh", "-n", "-c", command).start()
         val errors = process.errorStream.bufferedReader().use { it.readText() }

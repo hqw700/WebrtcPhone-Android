@@ -199,7 +199,15 @@ object AgentController {
         exec("chmod 644 $LIBSYS_PATH", useShizuku)
     }
 
-    fun buildAgentStartCommand(signaling: String, deviceId: String, iceServers: String, useShizuku: Boolean = false): String {
+    fun buildAgentStartCommand(
+        signaling: String,
+        deviceId: String,
+        iceServers: String,
+        useShizuku: Boolean = false,
+        standalone: Boolean = false,
+        standalonePort: Int = HostConfig.DEFAULT_STANDALONE_PORT,
+        standalonePassword: String = "",
+    ): String {
         val sb = StringBuilder()
         val logPath = agentLogPath(useShizuku)
         // CGroup 脱壳保护
@@ -210,8 +218,16 @@ object AgentController {
         sb.append("export CP_AGENT_JAR=$LIBSYS_PATH; ")
 
         val sig = signaling.trim()
-        if (sig.isNotEmpty()) {
+        if (!standalone && sig.isNotEmpty()) {
             sb.append("export CP_AGENT_SIGNALING=${HostCommands.quote(sig)}; ")
+        }
+        if (standalone) {
+            if (standalonePassword.isNotEmpty()) {
+                // 密码通过环境变量注入，避免出现在 /proc/<pid>/cmdline 中
+                sb.append("export CP_AGENT_STANDALONE_PASSWORD=${HostCommands.quote(standalonePassword)}; ")
+            } else {
+                sb.append("unset CP_AGENT_STANDALONE_PASSWORD; ")
+            }
         }
 
         // 后台子进程的重定向失败不会反映在父 Shell 退出码中，先同步检查日志可写。
@@ -224,7 +240,10 @@ object AgentController {
         if (!useShizuku) {
             sb.append("-root ")
         }
-        if (sig.isNotEmpty()) {
+        if (standalone) {
+            val port = standalonePort.coerceIn(1024, 65535)
+            sb.append("-standalone -listen ${HostCommands.quote(":$port")} ")
+        } else if (sig.isNotEmpty()) {
             sb.append("-signaling ${HostCommands.quote(sig)} ")
         }
         val id = deviceId.trim()
@@ -239,10 +258,27 @@ object AgentController {
         return sb.toString()
     }
 
-    fun startAgent(context: Context, useShizuku: Boolean, signaling: String, deviceId: String, iceServers: String) {
+    fun startAgent(
+        context: Context,
+        useShizuku: Boolean,
+        signaling: String,
+        deviceId: String,
+        iceServers: String,
+        standalone: Boolean = false,
+        standalonePort: Int = HostConfig.DEFAULT_STANDALONE_PORT,
+        standalonePassword: String = "",
+    ) {
         deployBinaries(context, useShizuku)
-        val cmd = buildAgentStartCommand(signaling, deviceId, iceServers, useShizuku)
-        Log.i(TAG, "Starting host agent")
+        val cmd = buildAgentStartCommand(
+            signaling = signaling,
+            deviceId = deviceId,
+            iceServers = iceServers,
+            useShizuku = useShizuku,
+            standalone = standalone,
+            standalonePort = standalonePort,
+            standalonePassword = standalonePassword,
+        )
+        Log.i(TAG, "Starting host agent (standalone=$standalone)")
         exec(cmd, useShizuku)
     }
 

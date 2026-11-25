@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PhonelinkSetup
 import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
@@ -79,9 +81,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.webrtc_phone.android.ui.common.PasswordField
 import com.webrtc_phone.android.ui.common.Pill
 import com.webrtc_phone.android.ui.common.SectionCard
 import com.webrtc_phone.android.ui.common.StatusDot
@@ -243,29 +247,162 @@ fun HostScreen(
                 }
             }
 
-            // 连接与信令配置
-            SectionCard(title = "连接与信令配置") {
+            // 连接与工作模式配置
+            SectionCard(title = "连接模式与配置") {
                 Column(Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = state.prefs.signalingUrl,
-                        onValueChange = { vm.updatePrefs { p -> p.copy(signalingUrl = it) } },
-                        label = { Text("信令服务器地址 (ws:// 或 wss://)") },
-                        leadingIcon = { Icon(Icons.Outlined.Dns, null) },
-                        enabled = !state.serviceRunning && !state.isBusy,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("例如 wss://192.168.1.100:8443") }
-                    )
+                    Text("选择接入方式", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            selected = !state.prefs.standalone,
+                            onClick = { vm.updatePrefs { p -> p.copy(standalone = false) } },
+                            label = { Text("信令服务器模式") },
+                            leadingIcon = if (!state.prefs.standalone) {
+                                { Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AppColors.Brand.copy(alpha = 0.2f),
+                                selectedLabelColor = AppColors.Brand
+                            )
+                        )
+                        FilterChip(
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            selected = state.prefs.standalone,
+                            onClick = { vm.updatePrefs { p -> p.copy(standalone = true) } },
+                            label = { Text("独立单机模式 (免信令)") },
+                            leadingIcon = if (state.prefs.standalone) {
+                                { Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = AppColors.Brand.copy(alpha = 0.2f),
+                                selectedLabelColor = AppColors.Brand
+                            )
+                        )
+                    }
 
-                    if (!currentServerUrl.isNullOrBlank() && currentServerUrl != state.prefs.signalingUrl) {
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(
-                            onClick = { vm.fillSignalingUrl(currentServerUrl) },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    Spacer(Modifier.height(10.dp))
+                    if (state.prefs.standalone) {
+                        var portText by rememberSaveable(state.prefs.standalonePort) {
+                            mutableStateOf(state.prefs.standalonePort.toString())
+                        }
+                        val portNum = portText.toIntOrNull()
+                        val portInvalid = portNum == null || portNum !in 1024..65535
+
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = AppColors.Brand.copy(alpha = 0.08f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("填入当前登录的信令服务器: $currentServerUrl", style = MaterialTheme.typography.bodySmall)
+                            Column(Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Outlined.PhonelinkSetup, null, tint = AppColors.Brand, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "手机直连地址（另一台手机选择“单机直连”输入）",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = AppColors.Brand
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                if (state.directEndpoints.isEmpty()) {
+                                    Text(
+                                        "暂未检测到局域网 IP，请先连接 Wi-Fi 或开启个人热点后点击右上角刷新。",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    state.directEndpoints.forEach { ep ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    clipboard.setText(AnnotatedString(ep.address))
+                                                    Toast.makeText(context, "已复制直连地址: ${ep.address}", Toast.LENGTH_SHORT).show()
+                                                }
+                                                .padding(vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(Modifier.weight(1f)) {
+                                                Text(ep.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(
+                                                    ep.address,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    clipboard.setText(AnnotatedString(ep.address))
+                                                    Toast.makeText(context, "已复制直连地址: ${ep.address}", Toast.LENGTH_SHORT).show()
+                                                },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(Icons.Outlined.ContentCopy, contentDescription = "复制地址", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = portText,
+                            onValueChange = { raw ->
+                                val digits = raw.filter { it.isDigit() }.take(5)
+                                portText = digits
+                                digits.toIntOrNull()?.takeIf { it in 1024..65535 }?.let { valid ->
+                                    vm.updatePrefs { p -> p.copy(standalonePort = valid) }
+                                }
+                            },
+                            label = { Text("直连监听端口 (默认 8443)") },
+                            leadingIcon = { Icon(Icons.Outlined.Dns, null) },
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            isError = portInvalid,
+                            supportingText = if (portInvalid) {
+                                { Text("请输入 1024 ~ 65535 之间的端口号") }
+                            } else {
+                                { Text("开启 HTTPS/WSS 加密直连，首次连接需核对自签证书指纹") }
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        PasswordField(
+                            value = state.prefs.standalonePassword,
+                            onValueChange = { pwd -> vm.updatePrefs { p -> p.copy(standalonePassword = pwd) } },
+                            label = "直连访问密码 (可选，留空则免密直连)",
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            supportingText = "密码加密保存于本机 Keystore，并通过环境变量安全注入 Agent",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = state.prefs.signalingUrl,
+                            onValueChange = { vm.updatePrefs { p -> p.copy(signalingUrl = it) } },
+                            label = { Text("信令服务器地址 (ws:// 或 wss://)") },
+                            leadingIcon = { Icon(Icons.Outlined.Dns, null) },
+                            enabled = !state.serviceRunning && !state.isBusy,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("例如 wss://192.168.1.100:8443") }
+                        )
+
+                        if (!currentServerUrl.isNullOrBlank() && currentServerUrl != state.prefs.signalingUrl) {
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(
+                                onClick = { vm.fillSignalingUrl(currentServerUrl) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Outlined.Check, null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("填入当前登录的信令服务器: $currentServerUrl", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
 
@@ -326,12 +463,14 @@ fun HostScreen(
                                 selectedLabelColor = AppColors.Brand
                             )
                         )
-                        FilterChip(
-                            enabled = !state.serviceRunning && !state.isBusy,
-                            selected = state.prefs.runMode == RunMode.PROJECTION,
-                            onClick = { vm.updatePrefs { it.copy(runMode = RunMode.PROJECTION) } },
-                            label = { Text("系统录屏（免 ADB / Root）") }
-                        )
+                        if (!state.prefs.standalone) {
+                            FilterChip(
+                                enabled = !state.serviceRunning && !state.isBusy,
+                                selected = state.prefs.runMode == RunMode.PROJECTION,
+                                onClick = { vm.updatePrefs { it.copy(runMode = RunMode.PROJECTION) } },
+                                label = { Text("系统录屏（免 ADB / Root）") }
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(6.dp))
@@ -524,6 +663,7 @@ private fun HostStatusBanner(state: HostUiState) {
             ) {
                 InfoChip("📱 ${state.deviceModel}")
                 InfoChip("🌐 ${state.localIp}")
+                InfoChip(if (state.prefs.standalone) "🔗 单机直连 :${state.prefs.standalonePort}" else "🛰️ 信令模式")
                 InfoChip("🤖 ${state.androidVersion}")
                 val engineDesc = when (state.prefs.runMode) {
                     RunMode.PROJECTION -> "系统录屏"

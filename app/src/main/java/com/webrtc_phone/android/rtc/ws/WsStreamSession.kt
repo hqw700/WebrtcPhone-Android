@@ -80,8 +80,14 @@ class WsStreamSession(
         if (closed) return
         _phase.value = ConnectionPhase.Signaling
         val token = (target.auth as? StreamAuth.User)?.token.orEmpty()
-        val url = target.endpoint.wsUrl("/connect_client") + "?token=$token"
-        val req = Request.Builder().url(url).build()
+        val url = if (token.isNotEmpty()) {
+            target.endpoint.wsUrl("/connect_client") + "?token=" + android.net.Uri.encode(token)
+        } else {
+            target.endpoint.wsUrl("/connect_client")
+        }
+        val req = Request.Builder().url(url).apply {
+            if (token.isNotEmpty()) header("Authorization", "Bearer $token")
+        }.build()
         ws = httpFactory.webSocketFor(target.endpoint).newWebSocket(req, listener)
         statsTask = statsExecutor.scheduleWithFixedDelay({ tickStats() }, 1, 1, TimeUnit.SECONDS)
     }
@@ -129,7 +135,7 @@ class WsStreamSession(
             if (closed) return
             val data = bytes.toByteArray()
             val frame = WsProtocol.parsePrev(data) ?: return
-            if (frame.deviceId.isNotEmpty() && frame.deviceId != target.deviceId) return
+            if (!WsProtocol.matchesDeviceId(frame.deviceId, target.deviceId)) return
             byteCount.addAndGet(frame.nalu.size.toLong())
             decodeExecutor.execute { feedDecoder(frame.nalu, frame.isKey) }
         }

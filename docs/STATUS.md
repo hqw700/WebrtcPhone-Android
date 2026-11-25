@@ -2,6 +2,19 @@
 
 本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
 
+## 2026-11-25 单 Agent 独立单机模式（免信令手机对手机直连）
+
+- **Agent 内嵌轻信令 (`android-agentd/cloudphone-agent/standalone.go`)**：新增 `-standalone`（默认监听 `:8443`）、`-listen`、`-standalone-tls`、`-standalone-cert`/`-standalone-key`、`-standalone-password`（推荐 `CP_AGENT_STANDALONE_PASSWORD` 环境变量）等参数与 `CP_AGENT_*` 配置绑定。支持持久化 ECDSA P-256 自签证书（Root 创建时自动 `chown 2000:2000` 兼容切换至 Shizuku）、常量时间访问口令校验（未认证请求 `/devices`、`/connect_client` 返回 `401`）、`/api/standalone/ping`、`/devices`、`/snapshots/<id>.jpg`（`ETag`/`304`）、`WS /connect_client` 完整信令转发与二进制 `PREV` 预览推流。`go test -v ./...` 全部 24 个测试通过，并交叉编译同步 `arm64`/`armeabi-v7a`/`amd64` 资产至 `app/src/main/assets/`。
+- **App 受控端与控制端 (`app/WebrtcPhone`)**：
+  - 受控端 `host/`（`HostConfig`、`AgentController`、`HostViewModel`、`HostScreen`、`AgentHostService`、`BootReceiver`）新增「独立单机模式 (免信令)」开关、本机局域网/热点/VPN 地址枚举一键复制、监听端口（默认 `8443`）与直连访问密码（仅存 Keystore `SecureStore` 并经 shell `export CP_AGENT_STANDALONE_PASSWORD` 注入）；
+  - 控制端（`SessionRepository.connectStandalone`、`LoginScreen`/`LoginViewModel`「信令服务器 | 单机直连」切换、`HomeScreen` 快捷直连入口）严格使用 `CertificatePinStore` TOFU 指纹校验，支持最近直连记录与 Keystore 加密记密码；投屏中（`StreamTarget.standalone`）自动隐藏依赖信令服务器的多机侧边栏与文件中转 Tab，工具面板支持 WebRTC 与 WS 模式互切及进入「摄像头监控」；
+  - 修复 `WsProtocol.matchesDeviceId` / `WsStreamSession`：由于二进制 `PREV` 包头仅保留 32 字节设备 ID，而默认 `<model>-<UUID>` 设备 ID 超过 32 字节会被截断，改为超过 32 字节时按 UTF-8 32 字节前缀精确匹配，并补充单测验证。
+- **测试与构建**：JVM 单元测试 `./gradlew :app:testDebugUnitTest` 全部 61 个测试通过；R8 Release APK（`WebrtcPhone-v0.4.5-release.apk`）构建通过。
+- **真机实测（Pixel 7 Pro / Android 15，序列号 `28301FDH300F49`，局域网 IP `192.168.100.232`）**：
+  - 安装 Release APK 后在 App 内一键启动「独立单机模式 (免信令)」，验证 `cloudphone-agent` 进程命令行无密码泄漏；
+  - 局域网 HTTPS 实测 `/api/standalone/ping`、错误口令返回 `401`、正确口令登录签发 Token、`/devices` 返回 `1080×2340` 与 3 颗物理镜头、`/snapshots/<id>.jpg` 返回 `200`（43,928 字节），重启后自签证书 SHA-256 指纹保持一致；
+  - 本机「单机直连」弹出的 `CertificateTrustDialog` 指纹与 Agent 日志及 OpenSSL 查询结果 100% 一致，确认信任后 387ms 完成 WebRTC `Connected`，666ms 渲染首帧（实测 `31–38ms`、`35–46fps`、`888×1920`），P2P `file-channel` 列举 `/sdcard` 目录与 `adb-channel` 打开正常；工具面板一键切换至 `WS 模式` 后正常接收解码 `PREV` 流（`25fps`、`105 Kbps`、`896×1920`），切回 `WebRTC 直连` 后恢复流畅画面并正常断开退出，`logcat -b crash` 零崩溃；收尾前已清除临时测试密码并验证免密 `/api/standalone/ping` 就绪（`"auth_required":false`）。
+
 ## 2026-11-02 Shizuku 启动被旧 Root 日志阻断
 
 - ADB 确认截图来自已连接的 Android 15 真机：Shizuku 正常运行，但 Agent 不在进程列表中。`cloudphone-agent-run.log` 属于 `root:root`，权限 `0644`；01:20:23–24 的注册、鉴权成功信息是旧日志。

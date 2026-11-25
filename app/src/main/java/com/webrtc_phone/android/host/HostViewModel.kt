@@ -16,6 +16,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
 import java.net.Inet4Address
+import java.net.Inet6Address
 import java.net.NetworkInterface
 
 enum class HostStatus {
@@ -23,6 +24,12 @@ enum class HostStatus {
     STARTING,
     RUNNING
 }
+
+data class DirectEndpointInfo(
+    val label: String,
+    val address: String,
+    val isIpv6: Boolean = false,
+)
 
 data class HostUiState(
     val status: HostStatus = HostStatus.STOPPED,
@@ -36,6 +43,7 @@ data class HostUiState(
     val deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL}",
     val androidVersion: String = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
     val localIp: String = "127.0.0.1",
+    val directEndpoints: List<DirectEndpointInfo> = emptyList(),
     val isBusy: Boolean = false,
     val errorMessage: String? = null,
     val toastMessage: String? = null
@@ -43,11 +51,14 @@ data class HostUiState(
 
 class HostViewModel(app: Application) : AndroidViewModel(app) {
 
+    private val initialPrefs = HostConfig.load(app)
+
     private val _state = MutableStateFlow(
         HostUiState(
             hasAssets = AgentController.hasAssets(app),
-            prefs = HostConfig.load(app),
-            localIp = getLocalIpAddress()
+            prefs = initialPrefs,
+            localIp = getLocalIpAddress(),
+            directEndpoints = listDirectEndpoints(initialPrefs.standalonePort),
         )
     )
     val state: StateFlow<HostUiState> = _state.asStateFlow()
@@ -118,7 +129,8 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                 rootStatus = root,
                 shizukuStatus = shizuku,
                 hasAssets = hasAssets,
-                localIp = getLocalIpAddress()
+                localIp = getLocalIpAddress(),
+                directEndpoints = listDirectEndpoints(it.prefs.standalonePort),
             )
         }
     }
@@ -133,9 +145,26 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
         if (AgentHostService.isServiceRunning || ProjectionStandbyService.state.value.active || _state.value.isBusy) return
         val previous = _state.value.prefs
         val requested = transform(previous)
-        val updated = requested.copy(autoStart = requested.autoStart && requested.runMode == RunMode.ROOT)
+        val normalizedMode = if (requested.standalone && requested.runMode == RunMode.PROJECTION) {
+            if (AgentController.checkShizukuStatus() == AgentController.ShizukuStatus.RUNNING_AND_GRANTED &&
+                _state.value.rootStatus != AgentController.RootStatus.GRANTED
+            ) RunMode.SHIZUKU else RunMode.ROOT
+        } else {
+            requested.runMode
+        }
+        val updated = requested.copy(
+            runMode = normalizedMode,
+            autoStart = requested.autoStart && normalizedMode == RunMode.ROOT,
+        )
         HostConfig.save(getApplication(), updated)
-        _state.update { it.copy(prefs = updated) }
+        _state.update {
+            it.copy(
+                prefs = updated,
+                directEndpoints = if (updated.standalonePort != previous.standalonePort || updated.standalone != previous.standalone) {
+                    listDirectEndpoints(updated.standalonePort)
+                } else it.directEndpoints,
+            )
+        }
         if (updated.runMode != previous.runMode) refreshState()
     }
 
@@ -187,7 +216,12 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
 
-            if (currentPrefs.signalingUrl.isBlank()) {
+            if (currentPrefs.standalone) {
+                if (currentPrefs.standalonePort !in 1024..65535) {
+                    _state.update { it.copy(isBusy = false, errorMessage = "直连监听端口需在 1024 ~ 65535 之间") }
+                    return@launch
+                }
+            } else if (currentPrefs.signalingUrl.isBlank()) {
                 _state.update { it.copy(isBusy = false, errorMessage = "请填写外部信令服务器地址") }
                 return@launch
             }
@@ -278,6 +312,51 @@ class HostViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
+    }
+
+    private fun listDirectEndpoints(port: Int): List<DirectEndpointInfo> {
+        val validPort = port.takeIf { it in 1024..65535 } ?: HostConfig.DEFAULT_STANDALONE_PORT
+        val v4List = mutableListOf<Pair<Int, DirectEndpointInfo>>()
+        val v6List = mutableListOf<Pair<Int, DirectEndpointInfo>>()
+        runCatching {
+            val en = NetworkInterface.getNetworkInterfaces() ?: return@runCatching
+            while (en.hasMoreElements()) {
+                val intf = en.nextElement()
+                if (!intf.isUp || intf.isLoopback) continue
+                val name = intf.name.orEmpty().lowercase()
+                val (priority, label) = when {
+                    name.startsWith("wlan") -> 1 to "Wi-Fi 局域网"
+                    name.startsWith("ap") || name.startsWith("swlan") || name.startsWith("rndis") -> 2 to "个人热点 / USB"
+                    name.startsWith("eth") -> 3 to "有线网络"
+                    name.startsWith("tun") || name.startsWith("tap") || name.startsWith("wg") || name.startsWith("tailscale") -> 4 to "虚拟专网 ($name)"
+                    name.startsWith("rmnet") || name.startsWith("ccmni") -> 6 to "蜂窝移动网络"
+                    else -> 5 to "网卡 ($name)"
+                }
+                val addrs = intf.inetAddresses
+                while (addrs.hasMoreElements()) {
+                    val addr = addrs.nextElement()
+                    if (addr.isLoopbackAddress) continue
+                    when (addr) {
+                        is Inet4Address -> {
+                            val ip = addr.hostAddress ?: continue
+                            if (ip.isNotBlank()) {
+                                v4List.add(priority to DirectEndpointInfo(label, "$ip:$validPort", isIpv6 = false))
+                            }
+                        }
+                        is Inet6Address -> {
+                            if (addr.isLinkLocalAddress || addr.isMulticastAddress || addr.isSiteLocalAddress) continue
+                            val raw = (addr.hostAddress ?: continue).substringBefore('%')
+                            if (raw.isNotBlank()) {
+                                v6List.add(priority to DirectEndpointInfo("$label IPv6", "[$raw]:$validPort", isIpv6 = true))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val sortedV4 = v4List.sortedBy { it.first }.map { it.second }
+        val sortedV6 = v6List.sortedBy { it.first }.map { it.second }
+        return (sortedV4 + sortedV6).distinctBy { it.address }
     }
 
     private fun getLocalIpAddress(): String {

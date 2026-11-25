@@ -81,7 +81,7 @@ class RtcSession(
     private val _stats = MutableStateFlow(StreamStats())
     val stats: StateFlow<StreamStats> = _stats.asStateFlow()
 
-    private val _deviceInfo = MutableStateFlow<DeviceInfo?>(null)
+    private val _deviceInfo = MutableStateFlow<DeviceInfo?>(target.initialDeviceInfo)
     val deviceInfo: StateFlow<DeviceInfo?> = _deviceInfo.asStateFlow()
 
     private val _remoteClipboard = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)

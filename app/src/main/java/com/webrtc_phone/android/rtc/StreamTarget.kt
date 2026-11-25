@@ -2,6 +2,7 @@ package com.webrtc_phone.android.rtc
 
 import com.webrtc_phone.android.core.net.ServerEndpoint
 import com.webrtc_phone.android.data.model.AccessMode
+import com.webrtc_phone.android.data.model.DeviceInfo
 import com.webrtc_phone.android.data.settings.StreamSettings
 
 /** 连接鉴权方式 */
@@ -49,6 +50,10 @@ data class StreamTarget(
     /** 设备列表里已知的分辨率，首帧到达前用于占位比例 */
     val displayHint: Pair<Int, Int>? = null,
     val projectionOnDemand: Boolean = false,
+    /** 免信令单机直连模式（无设备列表/切换设备与服务器中转） */
+    val standalone: Boolean = false,
+    /** 单机直连握手里已拉取的设备硬件信息，保证首帧前与摄像头切换即可见完整镜头与逻辑分辨率 */
+    val initialDeviceInfo: DeviceInfo? = null,
 ) {
     val viewOnly: Boolean get() = accessMode == AccessMode.VIEW_ONLY
     val isGuest: Boolean get() = auth is StreamAuth.Share

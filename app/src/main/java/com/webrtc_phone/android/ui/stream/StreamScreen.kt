@@ -82,7 +82,7 @@ fun StreamScreen(
             lastKnownDeviceInfo = cur
         }
     }
-    val effectiveDeviceInfo = deviceInfo?.takeIf { it.cameras.isNotEmpty() } ?: lastKnownDeviceInfo ?: DeviceInfo()
+    val effectiveDeviceInfo = deviceInfo?.takeIf { it.cameras.isNotEmpty() } ?: lastKnownDeviceInfo ?: t.initialDeviceInfo ?: DeviceInfo()
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val ratio = size?.let { it.first.toFloat() / it.second } ?: (9f / 19.5f)
     val connected = phase == ConnectionPhase.Connected || phase == ConnectionPhase.Interrupted

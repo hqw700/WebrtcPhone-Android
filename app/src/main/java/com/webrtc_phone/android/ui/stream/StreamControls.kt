@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -201,6 +202,7 @@ fun CameraBar(
                 vm.toast(if (front) "正在切换至后置主摄…" else "正在切换至前置自拍…")
                 vm.switchCamera(p.copy(facing = if (front) "back" else "front", cameraId = if (front) "0" else "1", zoom = 1.0))
             }
+            BarIcon(Icons.Filled.PhoneAndroid, "切回屏幕") { vm.switchToScreen() }
             BarIcon(Icons.Filled.Close, "退出", onClick = onExit)
         }
         if (vm.cameraZoom > 1.01f) Text(

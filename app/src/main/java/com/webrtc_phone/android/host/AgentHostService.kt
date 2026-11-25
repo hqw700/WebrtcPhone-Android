@@ -124,15 +124,23 @@ class AgentHostService : Service {
                     val pid = AgentController.isAgentRunning(useShizuku)
                     if (pid.isNotEmpty()) {
                         lastError = null
-                        updateNotification("运行中 [PID: $pid] · 设备: ${prefs.deviceId}")
+                        val statusMsg = if (prefs.standalone) {
+                            "单机直连运行中 [PID: $pid] · 端口: ${prefs.standalonePort}"
+                        } else {
+                            "运行中 [PID: $pid] · 设备: ${prefs.deviceId}"
+                        }
+                        updateNotification(statusMsg)
                     } else {
                         updateNotification("Agent 未运行，尝试拉起中...")
                         AgentController.startAgent(
-                            applicationContext,
-                            useShizuku,
-                            prefs.signalingUrl,
-                            prefs.deviceId,
-                            prefs.iceServers
+                            context = applicationContext,
+                            useShizuku = useShizuku,
+                            signaling = prefs.signalingUrl,
+                            deviceId = prefs.deviceId,
+                            iceServers = prefs.iceServers,
+                            standalone = prefs.standalone,
+                            standalonePort = prefs.standalonePort,
+                            standalonePassword = prefs.standalonePassword,
                         )
                     }
                 } catch (e: Exception) {

@@ -21,11 +21,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.CastConnected
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.PhonelinkSetup
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -35,9 +37,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -47,6 +53,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
@@ -57,6 +64,7 @@ import com.webrtc_phone.android.R
 import com.webrtc_phone.android.core.net.ServerEndpoint
 import com.webrtc_phone.android.ui.common.CertificateTrustDialog
 import com.webrtc_phone.android.ui.common.PasswordField
+import com.webrtc_phone.android.ui.stream.StreamLauncher
 import com.webrtc_phone.android.ui.theme.AppColors
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -64,6 +72,13 @@ import com.webrtc_phone.android.ui.theme.AppColors
 fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
     val s by vm.state.collectAsStateWithLifecycle()
     val focus = LocalFocusManager.current
+    val context = LocalContext.current
+
+    LaunchedEffect(vm) {
+        vm.directLaunch.collect { target ->
+            StreamLauncher.launch(context, target)
+        }
+    }
 
     Box(
         Modifier.fillMaxSize().systemBarsPadding().imePadding(),
@@ -77,7 +92,7 @@ fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(40.dp))
             Image(painterResource(R.drawable.ic_app_logo), null, Modifier.size(80.dp))
             Spacer(Modifier.height(12.dp))
             Text(androidx.compose.ui.res.stringResource(R.string.app_title), style = MaterialTheme.typography.headlineSmall)
@@ -86,47 +101,94 @@ fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(20.dp))
 
-            ServerField(vm, s)
-            Spacer(Modifier.height(8.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = !s.directMode,
+                    onClick = { vm.setDirectMode(false) },
+                    enabled = !s.loading,
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                    icon = { SegmentedButtonDefaults.Icon(active = !s.directMode) },
+                ) { Text("信令服务器") }
+                SegmentedButton(
+                    selected = s.directMode,
+                    onClick = { vm.setDirectMode(true) },
+                    enabled = !s.loading,
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                    icon = { SegmentedButtonDefaults.Icon(active = s.directMode) },
+                ) { Text("单机直连") }
+            }
+            Spacer(Modifier.height(18.dp))
 
-            Spacer(Modifier.height(4.dp))
-            OutlinedTextField(
-                value = s.username,
-                onValueChange = { v -> vm.edit { it.copy(username = v) } },
-                label = { Text("用户名") },
-                leadingIcon = { Icon(Icons.Outlined.Person, null) },
-                singleLine = true,
-                enabled = !s.loading,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
-                keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            PasswordField(
-                value = s.password,
-                onValueChange = { v -> vm.edit { it.copy(password = v) } },
-                label = "密码",
-                enabled = !s.loading,
-                modifier = Modifier.fillMaxWidth(),
-                onImeAction = { focus.clearFocus(); vm.login() },
-            )
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .clickable(enabled = !s.loading) { vm.setRememberPassword(!s.rememberPassword) },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Checkbox(checked = s.rememberPassword, onCheckedChange = vm::setRememberPassword, enabled = !s.loading)
-                Text("记住密码", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "加密保存在本机",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            if (s.directMode) {
+                DirectAddressField(vm, s)
+                Spacer(Modifier.height(8.dp))
+                PasswordField(
+                    value = s.directPassword,
+                    onValueChange = { v -> vm.edit { it.copy(directPassword = v) } },
+                    label = "直连访问密码（无密码留空）",
+                    enabled = !s.loading,
+                    modifier = Modifier.fillMaxWidth(),
+                    onImeAction = { focus.clearFocus(); vm.connectDirect() },
                 )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .clickable(enabled = !s.loading) { vm.setRememberDirectPassword(!s.rememberDirectPassword) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = s.rememberDirectPassword, onCheckedChange = vm::setRememberDirectPassword, enabled = !s.loading)
+                    Text("记住直连密码", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "加密保存在本机",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                ServerField(vm, s)
+                Spacer(Modifier.height(8.dp))
+
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = s.username,
+                    onValueChange = { v -> vm.edit { it.copy(username = v) } },
+                    label = { Text("用户名") },
+                    leadingIcon = { Icon(Icons.Outlined.Person, null) },
+                    singleLine = true,
+                    enabled = !s.loading,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next, autoCorrectEnabled = false),
+                    keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                PasswordField(
+                    value = s.password,
+                    onValueChange = { v -> vm.edit { it.copy(password = v) } },
+                    label = "密码",
+                    enabled = !s.loading,
+                    modifier = Modifier.fillMaxWidth(),
+                    onImeAction = { focus.clearFocus(); vm.login() },
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
+                        .clickable(enabled = !s.loading) { vm.setRememberPassword(!s.rememberPassword) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = s.rememberPassword, onCheckedChange = vm::setRememberPassword, enabled = !s.loading)
+                    Text("记住密码", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "加密保存在本机",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             s.error?.let {
@@ -140,13 +202,23 @@ fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
 
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { focus.clearFocus(); vm.login() },
+                onClick = {
+                    focus.clearFocus()
+                    if (s.directMode) vm.connectDirect() else vm.login()
+                },
                 enabled = !s.loading,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = MaterialTheme.shapes.medium,
             ) {
-                if (s.loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                else Text("登录")
+                if (s.loading) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                } else if (s.directMode) {
+                    Icon(Icons.Outlined.CastConnected, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("立即直连控制")
+                } else {
+                    Text("登录")
+                }
             }
 
             Spacer(Modifier.height(14.dp))
@@ -161,12 +233,58 @@ fun LoginScreen(vm: LoginViewModel, onOpenHost: () -> Unit = {}) {
             }
 
             Spacer(Modifier.height(16.dp))
-            InsecureHint(s.server)
+            InsecureHint(if (s.directMode) s.directAddress else s.server)
             Spacer(Modifier.height(32.dp))
         }
     }
 
     s.untrusted?.let { CertificateTrustDialog(it, onTrust = vm::trustCertificate, onDismiss = vm::dismissCertificate) }
+}
+
+@Composable
+private fun DirectAddressField(vm: LoginViewModel, s: LoginUiState) {
+    val focus = LocalFocusManager.current
+    var menu by androidx.compose.runtime.remember { mutableStateOf(false) }
+    Box {
+        OutlinedTextField(
+            value = s.directAddress,
+            onValueChange = { v -> vm.edit { it.copy(directAddress = v.trim()) } },
+            label = { Text("对方手机地址") },
+            placeholder = { Text("192.168.1.20:8443") },
+            leadingIcon = { Icon(Icons.Outlined.PhonelinkSetup, null) },
+            trailingIcon = if (s.recentDirect.isNotEmpty()) {
+                { IconButton(onClick = { menu = true }, modifier = Modifier.focusProperties { canFocus = false }) { Icon(Icons.Outlined.History, "最近直连") } }
+            } else null,
+            isError = s.directAddressError != null,
+            supportingText = { Text(s.directAddressError ?: "填写被控端单机模式显示的 IP:端口，默认 8443") },
+            singleLine = true,
+            enabled = !s.loading,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            s.recentDirect.forEach { r ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(ServerEndpoint.parse(r.url)?.display ?: r.url)
+                            if (r.label.isNotBlank()) Text(
+                                r.label, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    onClick = { menu = false; vm.pickRecentDirect(r) },
+                    trailingIcon = {
+                        IconButton(onClick = { vm.forgetRecentDirect(r); if (s.recentDirect.size <= 1) menu = false }) {
+                            Icon(Icons.Filled.Close, "移除", Modifier.size(18.dp))
+                        }
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable

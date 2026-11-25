@@ -53,6 +53,18 @@ object WsProtocol {
         return PrevFrame(deviceId, isKey, ptsUs, nalu)
     }
 
+    /**
+     * PREV 头仅预留 32 字节存放 device_id；当设备 ID（如型号+UUID）超过 32 字节时，
+     * 服务端写入会按 UTF-8 截断到 32 字节。这里对齐该截断规则进行匹配。
+     */
+    fun matchesDeviceId(frameDeviceId: String, targetDeviceId: String): Boolean {
+        if (frameDeviceId.isEmpty() || targetDeviceId.isEmpty()) return true
+        if (frameDeviceId == targetDeviceId) return true
+        val targetBytes = targetDeviceId.toByteArray(Charsets.UTF_8)
+        if (targetBytes.size <= DEVICE_ID_LEN) return false
+        return frameDeviceId == String(targetBytes, 0, DEVICE_ID_LEN, Charsets.UTF_8)
+    }
+
     private fun readU32BE(b: ByteArray, off: Int): Int =
         ((b[off].toInt() and 0xff) shl 24) or ((b[off + 1].toInt() and 0xff) shl 16) or
             ((b[off + 2].toInt() and 0xff) shl 8) or (b[off + 3].toInt() and 0xff)

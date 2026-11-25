@@ -1,22 +1,30 @@
 # WebrtcPhone 架构设计
 
-云手机 Android 控制端。通过信令服务器（`webrtc-operator/standalone`）发现设备，与设备上的 `cloudphone-agent` 建立 WebRTC P2P 连接：视频/音频走媒体轨，控制走 DataChannel。
+云手机 Android 控制端（同时内置本机受控端 Host Agent 管理）。支持两种连接模式：
+- **信令服务器模式**：通过 `webrtc-operator/standalone` 发现设备，与设备上的 `cloudphone-agent` 建立 WebRTC P2P（或 WS `PREV` 中转）连接。
+- **单机直连模式（免信令，手机对手机）**：被控手机在本机受控端启用「独立单机模式」（`cloudphone-agent -standalone` 默认监听 `:8443` HTTPS/WSS），控制端通过「单机直连」直接完成证书指纹 TOFU 校验、可选口令登录与 WebRTC/WS 连接，无需部署外部信令服务器。
 
 ```
+信令模式:
 [Android App] ──HTTPS/WSS──> [信令服务器] <──WS── [cloudphone-agent (设备)]
       └──────────── WebRTC P2P（DTLS-SRTP + SCTP DataChannel）────────────┘
+
+单机直连模式:
+[控制端 App] ──HTTPS/WSS (:8443 + 可选口令/TOFU)──> [被控端 cloudphone-agent -standalone]
+      └──────────── WebRTC P2P / WS PREV 双模直连 ────────────────────────┘
 ```
 
 ## 分层
 
-包名 `com.webrtc_phone.android`，依赖方向只能自上而下：`ui → rtc / data → core`。
+包名 `com.webrtc_phone.android`，依赖方向只能自上而下：`ui → rtc / data / host → core`。
 
 | 层 | 目录 | 职责 |
 |---|---|---|
 | core | `core/net` `core/security` `core/util` | 服务器地址、HTTP 客户端、TLS 信任、加密存储、时间/格式化工具。不依赖任何业务 |
-| data | `data/api` `data/auth` `data/model` `data/realtime` `data/repo` `data/settings` | REST 接口、登录态、领域模型与 JSON 解析、仪表盘实时 WS、设备/标签/快捷文本仓库、本地设置 |
-| rtc | `rtc` `rtc/signaling` `rtc/channel` | 信令、PeerConnection 会话、DataChannel 协议（输入/剪贴板/文件/终端）、统计、会话管理 |
-| ui | `ui/*` | Jetpack Compose 界面 + ViewModel |
+| data | `data/api` `data/auth` `data/model` `data/realtime` `data/repo` `data/settings` | REST 接口、登录态与单机直连鉴权、领域模型与 JSON 解析、仪表盘实时 WS、设备/标签/快捷文本仓库、本地设置 |
+| rtc | `rtc` `rtc/signaling` `rtc/channel` `rtc/ws` | 信令、PeerConnection 会话、WS `PREV` 流会话、DataChannel 协议（输入/剪贴板/文件/终端）、统计、会话管理 |
+| host | `host` | 本机受控端管理（Root / Shizuku 执行、Agent 二进制释放、独立单机/信令配置、本机局域网/热点 IP 枚举、前台保活与开机自启） |
+| ui | `ui/*` | Jetpack Compose 界面 + ViewModel（含 `host/` 受控端页面） |
 
 依赖注入为手写容器 `WebrtcPhoneApp.kt` 中的 `AppContainer`，通过 `Context.container` 获取：
 - **进程级**：`secureStore` `pinStore` `httpFactory` `settings` `sessions` `rtcEngine` `streamSessions`
@@ -34,18 +42,25 @@
 ## data
 
 - `ApiClient`：鉴权头、错误归一化（服务端错误体可能是纯文本 `http.Error` 或 `{error}`/`{msg}` JSON，常见英文错误转中文）、401 回调登出、`{code,msg,data}` 信封解析。
-- `CloudPhoneApi`：对齐信令服务器路由表（`/api/login` `/api/me` `/devices` `/api/tags` `/api/quick_texts` `/api/share/*` `/api/admin/users*` `/api/devices/{id}` 等）。
-- `SessionRepository`：登录态（token 只存 SecureStore）、最近服务器列表（明文 prefs，仅 URL+用户名）、记住密码（按 服务器+用户名 隔离加密保存）。收到 401 自动登出，`logoutReason` 供登录页提示。
+- `CloudPhoneApi`：对齐信令服务器及 Agent 独立单机模式路由表（`/api/standalone/ping` `/api/login` `/api/me` `/devices` `/api/tags` `/api/quick_texts` `/api/share/*` `/api/admin/users*` `/api/devices/{id}` 等）。
+- `SessionRepository`：登录态（token 只存 SecureStore）、最近服务器/直连主机列表（明文 prefs，仅 URL+用户名）、记住密码与记住直连密码（按端点头隔离加密保存于 SecureStore）；`connectStandalone()` 负责探测单机端点、按需登录并拉取首台设备信息。收到 401 自动登出，`logoutReason` 供登录页提示。
 - `DashboardSocket`：`/connect_client` 不发 `connect` 即为纯订阅模式，接收 `device_list_update` `snapshot_update` `snapshot_updated` `tags_update` `device_screen_state`。指数退避重连，20s 应用层 ping。
 - `DeviceRepository`：设备列表 / 缩略图 / 标签 / 账号信息。实时推送为主，HTTP 轮询兜底；缩略图按 ETag 拉取、降采样 RGB_565。`setActive(false)` 时关闭长连接与轮询（投屏期间首页不可见，自动让出带宽）。
 - `SettingsRepository`：画质（`StreamSettings` + `QualityPreset` 档位）与应用偏好（主题、宫格列数、振动、亮屏、剪贴板同步、导航键、性能浮层、自动重连、屏幕方向）。
 
+## host
+
+- `HostConfig`：受控端运行配置（Root/Shizuku 执行模式、自启、设备 ID、ICE 服务器、独立单机开关 `standalone`、监听端口 `standalonePort`）；直连访问密码独立保存于 `SecureStore`。
+- `AgentController`：校验并释放内置 `cloudphone-agent` 与 `libsys_core.so`，构建启动命令（单机模式传入 `-standalone -listen ':<port>'`，密码仅经 `CP_AGENT_STANDALONE_PASSWORD` 环境变量注入），通过 Root 或 Shizuku 拉起/停止并采集运行状态与日志。
+- `HostViewModel` / `HostScreen`：提供「信令服务器模式 / 独立单机模式 (免信令)」切换、枚举本机 Wi-Fi/热点/VPN 地址供控制端一键复制直连，并在运行时锁定配置。
+
 ## rtc
 
 ### 会话模型
-- `StreamTarget`：一次投屏的全部不可变输入（端点、设备、鉴权、权限、模式 Screen/Camera、画质、分辨率提示）。**修改画质 / 切换镜头 / 切换设备 = 以新 target 重建会话**（agent 协议不支持运行时切换）。
+- `StreamTarget`：一次投屏的全部不可变输入（端点、设备、鉴权、权限、模式 Screen/Camera、传输通道 WEBRTC/WEBSOCKET、是否单机模式 `standalone`、初始设备信息 `initialDeviceInfo`、画质、分辨率提示）。**修改画质 / 切换镜头 / 切换设备 = 以新 target 重建会话**（agent 协议不支持运行时切换）。
 - `RtcEngine`：进程级 EglBase + PeerConnectionFactory，跨会话复用（EglBase 若随会话释放，重连后渲染器黑屏）。
 - `RtcSession`：一次完整连接。**所有状态变更与 PeerConnection/DataChannel 生命周期都在单线程 executor 上执行**，WebRTC/OkHttp 回调一律转投，消除竞态与死通道访问。阶段 `ConnectionPhase`：Signaling → WaitingOffer → Negotiating → Connected（Interrupted 为 ICE 瞬断宽限 8s）→ Failed/Closed。超时：连接 25s，首帧 15s。
+- `WsProtocol` / `WsStreamSession`：WebSocket `PREV` 流会话（49 字节包头解析 + `matchesDeviceId` 对超 32 字节设备 ID 做 32 字节前缀兼容 + 单线程 `MediaCodec` 解码）。
 - `SessionManager`：进程级，同一时刻一个会话。页面重建直接复用；页面不可见只停止渲染，保活 5 分钟后断开；可恢复错误在前台自动重连（指数退避，最多 3 次）。
 
 ### 信令（`rtc/signaling`）
@@ -66,14 +81,14 @@
 
 ## ui
 
-- `ui/MainActivity`：未登录 → `LoginScreen`；已登录 → NavHost（home / shares / users / tags / quick_texts / stream_settings / app_settings / certs / about）。
-- `ui/home`：底部导航“设备 / 管理（仅 admin）/ 我的”。设备宫格（1–4 列）、状态/标签筛选、长按设备菜单（投屏、摄像头监控、分享、标签、信息、删除离线档案）。
+- `ui/MainActivity`：未登录 → `LoginScreen`（支持「信令服务器 | 单机直连」切换及跳转「本机受控端」）；已登录 → NavHost（home / host / shares / users / tags / quick_texts / stream_settings / app_settings / certs / about）。
+- `ui/home`：底部导航“设备 / 管理（仅 admin）/ 我的”，顶部支持快捷「单机直连」弹窗。设备宫格（1–4 列）、状态/标签筛选、长按设备菜单（投屏、摄像头监控、分享、标签、信息、删除离线档案）。
 - `ui/manage`：分享与卡密（创建/延期/撤销/复制/发送）、用户管理（新建/有效期与权限/备注/重置密码/踢下线/删除）、标签管理、快捷文本。
 - `ui/stream`：`StreamActivity` 全屏沉浸。
   - `StreamLauncher`：StreamTarget 含凭据，只在进程内存传递，不进 Intent extras。
   - `VideoArea` 等比居中；`TouchForwarder` + `TouchMapper` 多点触控、鼠标右键=返回、滚轮。
-  - 悬浮球（点击=工具面板，长按=设备侧边栏）、左侧边缘把手 `›`（打开设备侧边栏）、虚拟导航键。
-  - 工具面板：电源/音量/通知栏/截图、键盘输入/文本下发/剪贴板、文件/安装应用/终端、切换设备/画质/声音/性能/连接信息/重连/断开。
+  - 悬浮球（点击=工具面板，长按=设备侧边栏）、左侧边缘把手 `›`（打开设备侧边栏，单机模式下自动隐藏）、虚拟导航键。
+  - 工具面板：电源/音量/通知栏/截图、键盘输入/文本下发/剪贴板、文件/安装应用/终端、切换设备（非单机）/画质/切到摄像头监控/声音/性能/连接信息/重连/断开。
   - `DeviceDrawer`：投屏中切换设备（`StreamViewModel.switchDevice`），侧边栏打开期间每 10s 刷新设备列表。
   - 终端 `TerminalWebView`：**必须懒创建**（进程内初始化 Chromium 后部分机型 libwebrtc 枚举不到 H264 硬解）；只加载 `file:///android_asset/terminal`，拦截所有跳转、禁止网络。
   - 摄像头监控：镜头/分辨率/帧率选择、环境音、镜像、抓拍、双指数字变焦（改 SurfaceView 尺寸实现）。
