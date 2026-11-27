@@ -234,6 +234,7 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
                 deviceName = name,
                 mode = StreamMode.Screen,
                 settings = settings.stream.value,
+                initialDeviceInfo = d.info,
                 projectionOnDemand = d.info.projectionOnDemand,
                 displayHint = d.info.primaryDisplay?.let { it.width to it.height },
             )

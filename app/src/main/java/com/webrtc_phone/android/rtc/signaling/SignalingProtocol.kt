@@ -12,7 +12,7 @@ sealed interface SignalingMessage {
     data class Config(val iceServers: List<IceServerSpec>) : SignalingMessage
     data class DeviceInfo(val info: JSONObject) : SignalingMessage
     data class ProjectionStatus(val state: String) : SignalingMessage
-    data class Offer(val sdp: String) : SignalingMessage
+    data class Offer(val sdp: String, val videoCodec: String = "") : SignalingMessage
     data class Answer(val sdp: String) : SignalingMessage
     data class Candidate(val candidate: CandidateSpec) : SignalingMessage
     data class Error(val code: String, val message: String) : SignalingMessage
@@ -42,8 +42,9 @@ object SignalingProtocol {
     }
 
     private fun parsePayload(p: JSONObject): SignalingMessage? = when (p.optString("type")) {
+        "scrcpy_error" -> SignalingMessage.Error("SCRCPY_ERROR", p.optString("message"))
         "projection_status" -> SignalingMessage.ProjectionStatus(p.optString("state"))
-        "offer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Offer(it) }
+        "offer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Offer(it, p.optString("video_codec")) }
         "answer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Answer(it) }
         "ice-candidate" -> {
             val c = p.optJSONObject("candidate") ?: p

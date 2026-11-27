@@ -45,6 +45,7 @@ object Parsers {
             memTotalMb = o.optLong("mem_total_mb"),
             isEmulator = o.optBoolean("is_emulator"),
             agentVersion = o.optString("agent_version", o.optString("app_version")),
+            videoCodecs = o.optJSONArray("video_codecs")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: listOf("h264"),
             cameraSupport = o.optBoolean("camera_support"),
             projectionOnDemand = o.optBoolean("projection_on_demand"),
             cameras = o.optJSONArray("cameras").objects().map {

@@ -207,6 +207,7 @@ class HomeViewModel(private val c: AppContainer, val session: AuthSession) : Vie
             mode = if (camera != null) StreamMode.Camera(camera) else StreamMode.Screen,
             settings = c.settings.stream.value,
             transport = transport,
+            initialDeviceInfo = d.info,
             projectionOnDemand = d.info.projectionOnDemand,
             displayHint = d.info.primaryDisplay?.let { it.width to it.height },
         )

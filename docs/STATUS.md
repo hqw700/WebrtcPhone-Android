@@ -2,6 +2,10 @@
 
 本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
 
+## 2026-11-27 WebRTC 编码偏好
+
+全局和投屏画质设置支持 H.264、H.265、AV1、VP8、VP9 优先。默认 H.264，连接时结合 Agent 能力和当前 libwebrtc 接收能力选择编码。投屏统计显示实际接收编码。Android 控制端的端到端秒表对照待测。
+
 ## 2026-11-25 单机模式支持浏览器网页访问与免 Root/ADB 系统录屏直连
 
 - **内嵌单页 Web 控制台 (`standalone_ui.html`)**：在 `cloudphone-agent`（`//go:embed`）与 `app/WebrtcPhone`（`assets/standalone_ui.html`）同步内嵌零依赖 WebRTC 直控页面（约 23 KB），支持浏览器访问 `https://<手机IP>:<端口>/` 自动探测免密/口令登录、WebRTC 音视频、触控/滚轮/导航键/文本下发、录屏状态提示与摄像头切换。

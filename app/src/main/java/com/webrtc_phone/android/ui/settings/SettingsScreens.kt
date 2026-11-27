@@ -135,6 +135,15 @@ fun StreamQualityEditor(
             }
         }
     }
+    SectionCard(title = "WebRTC 编码偏好") {
+        FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            com.webrtc_phone.android.data.settings.VideoCodecPreference.entries.forEach { codec ->
+                FilterChip(selected = s.videoCodec == codec, onClick = { onChange { it.copy(videoCodec = codec) } },
+                    label = { Text("${codec.label} 优先") })
+            }
+        }
+        Text("设备或本机解码器不支持首选编码时使用 H.264。", modifier = Modifier.padding(12.dp))
+    }
     SectionCard(title = "高级参数") {
         SliderRow(
             "最大分辨率（长边）", s.maxSize.toFloat(), 0f..2560f, 8,

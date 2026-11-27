@@ -164,6 +164,13 @@ class ParsersTest {
 }
 
 class ProtocolTest {
+    @Test fun preferredCodecRequiresCompatibleSenderAndReceiver() {
+        val preference = com.webrtc_phone.android.data.settings.VideoCodecPreference.H265
+        assertEquals("h265", preference.resolve(listOf("h264", "h265"), listOf("video/H265")))
+        assertEquals("h264", preference.resolve(listOf("h264"), listOf("video/H265")))
+        assertEquals("h264", preference.resolve(listOf("h265"), listOf("video/H264")))
+    }
+
     private val sent = mutableListOf<String>()
     private var viewOnly = false
     private val input = InputProtocol({ sent += it; true }, { viewOnly }, clock = { 42L })

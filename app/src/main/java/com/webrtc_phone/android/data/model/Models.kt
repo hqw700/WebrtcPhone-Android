@@ -55,6 +55,7 @@ data class DeviceInfo(
     val cameras: List<CameraLens> = emptyList(),
     val displays: List<DisplayInfo> = emptyList(),
     val projectionOnDemand: Boolean = false,
+    val videoCodecs: List<String> = listOf("h264"),
 ) {
     val primaryDisplay: DisplayInfo? get() = displays.firstOrNull()
     val title: String

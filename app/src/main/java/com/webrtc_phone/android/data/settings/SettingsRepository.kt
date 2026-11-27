@@ -22,6 +22,16 @@ enum class QualityPreset(
     CUSTOM("自定义", 0, 0, 0),
 }
 
+enum class VideoCodecPreference(val wireName: String, val label: String) {
+    H264("h264", "H.264"), H265("h265", "H.265"), AV1("av1", "AV1"), VP8("vp8", "VP8"), VP9("vp9", "VP9");
+
+    fun resolve(deviceCodecs: List<String>?, receiverMimeTypes: List<String>): String {
+        val canEncode = deviceCodecs == null || wireName in deviceCodecs
+        val canDecode = receiverMimeTypes.any { it.equals("video/$wireName", ignoreCase = true) }
+        return if (canEncode && canDecode) wireName else H264.wireName
+    }
+}
+
 /** 投屏编码参数（下发给 agent 的 scrcpy_options） */
 data class StreamSettings(
     val preset: QualityPreset = QualityPreset.STANDARD,
@@ -35,6 +45,7 @@ data class StreamSettings(
     val maxBitrateMbps: Int = 20,
     val audio: Boolean = true,
     val powerOff: Boolean = false,
+    val videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
 ) {
     fun withPreset(p: QualityPreset): StreamSettings =
         if (p == QualityPreset.CUSTOM) copy(preset = p)
@@ -78,6 +89,7 @@ class SettingsRepository(context: Context) {
             .putInt("s_max_bitrate", v.maxBitrateMbps)
             .putBoolean("s_audio", v.audio)
             .putBoolean("s_power_off", v.powerOff)
+            .putString("s_video_codec", v.videoCodec.wireName)
             .apply()
         _stream.value = v
     }
@@ -125,6 +137,7 @@ class SettingsRepository(context: Context) {
             minBitrateMbps = prefs.getInt("s_min_bitrate", d.minBitrateMbps),
             maxBitrateMbps = prefs.getInt("s_max_bitrate", d.maxBitrateMbps),
             audio = prefs.getBoolean("s_audio", d.audio),
+            videoCodec = VideoCodecPreference.entries.find { it.wireName == prefs.getString("s_video_codec", null) } ?: d.videoCodec,
             powerOff = prefs.getBoolean("s_power_off", d.powerOff),
         )
     }

@@ -81,6 +81,8 @@ class RtcSession(
     private val _stats = MutableStateFlow(StreamStats())
     val stats: StateFlow<StreamStats> = _stats.asStateFlow()
 
+    private var requestedCodec = "h264"
+    private var explicitSessionClose = false
     private val _deviceInfo = MutableStateFlow<DeviceInfo?>(target.initialDeviceInfo)
     val deviceInfo: StateFlow<DeviceInfo?> = _deviceInfo.asStateFlow()
 
@@ -214,6 +216,9 @@ class RtcSession(
         timeoutTask?.cancel(false)
         interruptTask?.cancel(false)
         firstFrameTask?.cancel(false)
+        if (explicitSessionClose) {
+            signaling?.send(SignalingProtocol.forward(target.deviceId, org.json.JSONObject().put("type", "close-video-session")))
+        }
         signaling?.close()
         signaling = null
         renderer = null
@@ -243,7 +248,12 @@ class RtcSession(
         when (msg) {
             is SignalingMessage.Config -> {
                 createPeerConnection(msg)
-                signaling?.send(SignalingProtocol.requestOffer(target.deviceId, ScrcpyOptions.build(target), projectionResumeKey))
+                val preference = target.settings.videoCodec
+                requestedCodec = if (preference.wireName == "h264") "h264" else {
+                    val receiver = engine.factory().getRtpReceiverCapabilities(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO)
+                    preference.resolve(_deviceInfo.value?.videoCodecs, receiver.codecs.map { it.mimeType })
+                }
+                requestVideoOffer()
                 _phase.value = ConnectionPhase.WaitingOffer
             }
             is SignalingMessage.DeviceInfo -> {
@@ -275,18 +285,33 @@ class RtcSession(
                     fail(message, retryable = false)
                 }
             }
-            is SignalingMessage.Offer -> onRemoteOffer(msg.sdp)
+            is SignalingMessage.Offer -> {
+                explicitSessionClose = msg.videoCodec.isNotEmpty()
+                onRemoteOffer(msg.sdp)
+            }
             is SignalingMessage.Answer -> pc?.setRemoteDescription(
                 sdpObserver("setRemoteAnswer") { post { onRemoteSet() } },
                 SessionDescription(SessionDescription.Type.ANSWER, msg.sdp)
             )
             is SignalingMessage.Candidate -> addRemoteCandidate(msg.candidate)
             is SignalingMessage.Error -> {
+                if (_phase.value == ConnectionPhase.WaitingOffer && requestedCodec != "h264" &&
+                    msg.code == "SCRCPY_ERROR" && msg.message == "Device has no $requestedCodec encoder") {
+                    requestedCodec = "h264"
+                    requestVideoOffer()
+                    return
+                }
                 val text = if (msg.code == "SHARE_IN_USE") "该分享正被其他访客使用，单个分享同时仅允许一人在线" else msg.message
                 fail(text, retryable = msg.code != "SHARE_IN_USE")
             }
             else -> Unit
         }
+    }
+
+    private fun requestVideoOffer() {
+        val options = ScrcpyOptions.build(target).put("video_codec", requestedCodec)
+        if (requestedCodec != "h264") options.put("video_codec_options", "")
+        signaling?.send(SignalingProtocol.requestOffer(target.deviceId, options, projectionResumeKey))
     }
 
     private fun createPeerConnection(cfg: SignalingMessage.Config) {
