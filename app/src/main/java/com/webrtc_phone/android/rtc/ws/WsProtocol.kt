@@ -17,7 +17,7 @@ object WsProtocol {
     private const val DEVICE_ID_LEN = 32
 
     /** 解析出的 PREV 视频帧（nalu 为 Annex-B 裸流切片引用的拷贝） */
-    data class PrevFrame(val deviceId: String, val isKey: Boolean, val ptsUs: Long, val nalu: ByteArray)
+    data class PrevFrame(val deviceId: String, val isKey: Boolean, val ptsUs: Long, val nalu: ByteArray, val hevc: Boolean = false)
 
     /**
      * 是否为 PREV 二进制帧（magic "PREV"）。音频帧为 "AUDO"，web-app WS 模式当前不含音频。
@@ -37,7 +37,9 @@ object WsProtocol {
      * 非法/长度不足返回 null。
      */
     fun parsePrev(data: ByteArray): PrevFrame? {
-        if (data.size < PREV_HEADER_LEN || !isPrev(data)) return null
+        if (data.size < PREV_HEADER_LEN) return null
+        val hevc = data[0] == 72.toByte() && data[1] == 69.toByte() && data[2] == 86.toByte() && data[3] == 67.toByte()
+        if (!hevc && !isPrev(data)) return null
         val idEnd = run {
             var e = 4
             val limit = 4 + DEVICE_ID_LEN
@@ -48,9 +50,9 @@ object WsProtocol {
         val isKey = data[36].toInt() == 1
         val ptsUs = readU64BE(data, 37)
         val payloadLen = readU32BE(data, 45)
-        if (payloadLen < 0 || data.size < PREV_HEADER_LEN + payloadLen) return null
+        if (payloadLen < 0 || payloadLen > data.size - PREV_HEADER_LEN) return null
         val nalu = data.copyOfRange(PREV_HEADER_LEN, PREV_HEADER_LEN + payloadLen)
-        return PrevFrame(deviceId, isKey, ptsUs, nalu)
+        return PrevFrame(deviceId, isKey, ptsUs, nalu, hevc)
     }
 
     /**
@@ -81,7 +83,7 @@ object WsProtocol {
      * start_preview。bitrate 语义对齐 web：>=10000 视为 bps 原样下发；否则按 Mbps 乘 1_000_000。
      * 这里统一传入 bps（调用方用 StreamSettings.bitrate），直接下发。
      */
-    fun startPreview(deviceId: String, fps: Int, maxSize: Int, bitrateBps: Int, stayAwake: Boolean): String =
+    fun startPreview(deviceId: String, fps: Int, maxSize: Int, bitrateBps: Int, stayAwake: Boolean, hevc: Boolean = false): String =
         JSONObject().apply {
             put("message_type", "start_preview")
             put("type", "start_preview")
@@ -90,6 +92,7 @@ object WsProtocol {
             if (maxSize > 0) put("max_size", maxSize)
             if (bitrateBps > 0) put("bitrate", bitrateBps)
             put("stay_awake", stayAwake)
+            if (hevc) put("video_codec", "h265")
         }.toString()
 
     fun stopPreview(deviceId: String): String =

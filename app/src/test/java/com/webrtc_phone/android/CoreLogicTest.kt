@@ -361,6 +361,18 @@ class WsProtocolTest {
         assertTrue(nalu.contentEquals(p.nalu))
     }
 
+    @Test fun hevcUsesDistinctMagicAndExplicitOptIn() {
+        val nalu = byteArrayOf(0, 0, 0, 1, 0x40)
+        val frame = buildPrev("d", true, 1234, nalu)
+        "HEVC".toByteArray().copyInto(frame)
+        val parsed = WsProtocol.parsePrev(frame)!!
+        assertTrue(parsed.hevc)
+        assertTrue(parsed.isKey)
+        assertTrue(nalu.contentEquals(parsed.nalu))
+        assertEquals("h265", JSONObject(WsProtocol.startPreview("d", 60, 1080, 4000000, true, true)).getString("video_codec"))
+        assertFalse(JSONObject(WsProtocol.startPreview("d", 60, 1080, 4000000, true)).has("video_codec"))
+    }
+
     @Test fun parsePrevRejectsShortOrWrongMagic() {
         assertNull(WsProtocol.parsePrev(ByteArray(10)))
         // 正确长度但 magic 是 AUDO

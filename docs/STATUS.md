@@ -1,5 +1,8 @@
 # WebrtcPhone 进度与待办
 
+WebSocket 直控支持 HEVC 帧及 MediaCodec 解码，保留 H.264 兼容路径。实机接收端延时待测。
+
+
 本次 Shizuku 启动故障的完整原因、修复及真机验证记录见 [Shizuku 启动故障复盘](SHIZUKU_STARTUP_TROUBLESHOOTING.md)。
 
 ## 2026-11-27 WebRTC 编码偏好

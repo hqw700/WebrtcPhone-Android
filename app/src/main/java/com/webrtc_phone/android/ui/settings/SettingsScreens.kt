@@ -135,7 +135,7 @@ fun StreamQualityEditor(
             }
         }
     }
-    SectionCard(title = "WebRTC 编码偏好") {
+    SectionCard(title = "视频编码偏好") {
         FlowRow(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             com.webrtc_phone.android.data.settings.VideoCodecPreference.entries.forEach { codec ->
                 FilterChip(selected = s.videoCodec == codec, onClick = { onChange { it.copy(videoCodec = codec) } },

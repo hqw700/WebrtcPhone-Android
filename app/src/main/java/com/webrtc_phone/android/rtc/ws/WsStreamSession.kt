@@ -1,6 +1,7 @@
 package com.webrtc_phone.android.rtc.ws
 
 import android.media.MediaCodec
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.util.Log
 import android.view.Surface
@@ -108,22 +109,42 @@ class WsStreamSession(
     // 兼容 SessionManager 的音频开关（WS 模式无音频，空实现）
     fun setAudioEnabled(enabled: Boolean) {}
 
+    @Volatile private var activeHEVC = false
+    private var hevcFailed = false
+
+    private fun requestPreview(webSocket: WebSocket, hevc: Boolean) {
+        val s = target.settings
+        val bps = (s.bitrateMbps.coerceAtLeast(1)) * 1_000_000
+        webSocket.send(
+            WsProtocol.startPreview(
+                deviceId = target.deviceId,
+                fps = s.maxFps,
+                maxSize = s.maxSize,
+                bitrateBps = bps,
+                stayAwake = true,
+                hevc = hevc,
+            )
+        )
+    }
+
+    private fun fallbackHEVC(): Boolean {
+        if (!activeHEVC || hevcFailed) return false
+        hevcFailed = true
+        ws?.let { requestPreview(it, false) }
+        return true
+    }
+
     private val listener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             if (closed) return
             _phase.value = ConnectionPhase.WaitingOffer
             // 请求推流
-            val s = target.settings
-            val bps = (s.bitrateMbps.coerceAtLeast(1)) * 1_000_000
-            webSocket.send(
-                WsProtocol.startPreview(
-                    deviceId = target.deviceId,
-                    fps = s.maxFps,
-                    maxSize = s.maxSize,
-                    bitrateBps = bps,
-                    stayAwake = true,
-                )
-            )
+            val hevc = target.settings.videoCodec.wireName == "h265" && runCatching {
+                MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                    !info.isEncoder && MediaFormat.MIMETYPE_VIDEO_HEVC in info.supportedTypes
+                }
+            }.getOrDefault(false)
+            requestPreview(webSocket, hevc)
             _phase.value = ConnectionPhase.Negotiating
         }
 
@@ -137,7 +158,7 @@ class WsStreamSession(
             val frame = WsProtocol.parsePrev(data) ?: return
             if (!WsProtocol.matchesDeviceId(frame.deviceId, target.deviceId)) return
             byteCount.addAndGet(frame.nalu.size.toLong())
-            decodeExecutor.execute { feedDecoder(frame.nalu, frame.isKey) }
+            decodeExecutor.execute { feedDecoder(frame.nalu, frame.isKey, frame.hevc) }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -163,8 +184,14 @@ class WsStreamSession(
 
     // ---------- 解码（decodeExecutor 单线程） ----------
 
-    private fun feedDecoder(nalu: ByteArray, isKey: Boolean) {
-        if (closed) return
+    private fun feedDecoder(nalu: ByteArray, isKey: Boolean, hevc: Boolean) {
+        if (closed || hevc && hevcFailed) return
+        if (activeHEVC != hevc) {
+            if (!isKey) return
+            releaseCodec()
+            gotKeyFrame = false
+            activeHEVC = hevc
+        }
         if (!gotKeyFrame) {
             if (!isKey) return
             gotKeyFrame = true
@@ -185,6 +212,7 @@ class WsStreamSession(
             // 解码器异常：重置，等待下一个关键帧
             releaseCodec()
             gotKeyFrame = false
+            fallbackHEVC()
         }
     }
 
@@ -215,12 +243,13 @@ class WsStreamSession(
         if (!isKey) return null
         val (w, h) = _videoSize.value ?: (target.displayHint ?: (720 to 1280))
         return try {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h).apply {
+            val mime = if (activeHEVC) MediaFormat.MIMETYPE_VIDEO_HEVC else MediaFormat.MIMETYPE_VIDEO_AVC
+            val format = MediaFormat.createVideoFormat(mime, w, h).apply {
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 1024 * 1024)
                 // 低延迟（部分设备支持）
                 setInteger(MediaFormat.KEY_PRIORITY, 0)
             }
-            val mc = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            val mc = MediaCodec.createDecoderByType(mime)
             mc.configure(format, s, null, 0)
             mc.start()
             codec = mc
@@ -228,7 +257,7 @@ class WsStreamSession(
             mc
         } catch (e: Exception) {
             Log.e(TAG, "codec create failed: ${e.message}")
-            _phase.value = ConnectionPhase.Failed("解码器初始化失败", retryable = true)
+            if (!fallbackHEVC()) _phase.value = ConnectionPhase.Failed("解码器初始化失败", retryable = true)
             null
         }
     }
@@ -249,6 +278,7 @@ class WsStreamSession(
         lastStatsMs = now
         val size = _videoSize.value
         _stats.value = _stats.value.copy(
+            codec = if (activeHEVC) "H265" else "H264",
             fps = (frames * 1000 / dt).toInt(),
             bitrateBps = bytes * 8 * 1000 / dt,
             width = size?.first ?: 0,
