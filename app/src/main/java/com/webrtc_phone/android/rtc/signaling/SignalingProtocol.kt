@@ -12,7 +12,14 @@ sealed interface SignalingMessage {
     data class Config(val iceServers: List<IceServerSpec>) : SignalingMessage
     data class DeviceInfo(val info: JSONObject) : SignalingMessage
     data class ProjectionStatus(val state: String) : SignalingMessage
-    data class Offer(val sdp: String, val videoCodec: String = "") : SignalingMessage
+    data class Offer(
+        val sdp: String,
+        val videoCodec: String = "",
+        val apps: Map<String, String>? = null,
+        val desktop: Boolean = false,
+        val locked: Boolean = false,
+        val cameraControls: Boolean = false,
+    ) : SignalingMessage
     data class Answer(val sdp: String) : SignalingMessage
     data class Candidate(val candidate: CandidateSpec) : SignalingMessage
     data class Error(val code: String, val message: String) : SignalingMessage
@@ -44,7 +51,21 @@ object SignalingProtocol {
     private fun parsePayload(p: JSONObject): SignalingMessage? = when (p.optString("type")) {
         "scrcpy_error" -> SignalingMessage.Error("SCRCPY_ERROR", p.optString("message"))
         "projection_status" -> SignalingMessage.ProjectionStatus(p.optString("state"))
-        "offer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Offer(it, p.optString("video_codec")) }
+        "offer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { sdp ->
+            val apps = p.optJSONArray("window_apps")?.let { array ->
+                buildMap {
+                    for (i in 0 until array.length()) {
+                        val app = array.optJSONObject(i) ?: continue
+                        val pkg = app.optString("package")
+                        if (pkg.isNotBlank()) put(pkg, app.optString("name").ifBlank { pkg })
+                    }
+                }
+            }
+            SignalingMessage.Offer(
+                sdp, p.optString("video_codec"), apps, desktop = p.optBoolean("secondary_display"),
+                locked = p.optBoolean("window_device_locked"), cameraControls = p.optBoolean("camera_controls"),
+            )
+        }
         "answer" -> p.optString("sdp").takeIf { it.isNotEmpty() }?.let { SignalingMessage.Answer(it) }
         "ice-candidate" -> {
             val c = p.optJSONObject("candidate") ?: p
@@ -85,9 +106,9 @@ object SignalingProtocol {
     fun forward(deviceId: String, payload: JSONObject): String =
         JSONObject().put("message_type", "forward").put("device_id", deviceId).put("payload", payload).toString()
 
-    fun requestOffer(deviceId: String, scrcpyOptions: JSONObject, resumeKey: String? = null): String = forward(
+    fun requestOffer(deviceId: String, scrcpyOptions: JSONObject, resumeKey: String? = null, window: JSONObject? = null): String = forward(
         deviceId,
-        JSONObject().put("type", "request-offer").put("ip_preference", "auto").put("scrcpy_options", scrcpyOptions).put("projection_resume_key", resumeKey)
+        JSONObject().put("type", "request-offer").put("ip_preference", "auto").put("scrcpy_options", scrcpyOptions).put("projection_resume_key", resumeKey).put("app_window", window)
     )
 
     fun answer(deviceId: String, sdp: String): String =

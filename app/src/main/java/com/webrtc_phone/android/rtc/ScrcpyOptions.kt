@@ -24,9 +24,10 @@ object ScrcpyOptions {
             .put("audio_dup", true)
             .put("audio_low_latency", false)
             .put("power_off", s.powerOff)
+            .put("stay_awake", s.stayAwake)
 
         when (val m = target.mode) {
-            StreamMode.Screen -> o.put("video_source", "display")
+            StreamMode.Screen, is StreamMode.Window -> o.put("video_source", "display")
             is StreamMode.Camera -> {
                 val c = m.params
                 o.put("video_source", "camera")

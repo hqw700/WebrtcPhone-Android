@@ -46,6 +46,8 @@ object Parsers {
             isEmulator = o.optBoolean("is_emulator"),
             agentVersion = o.optString("agent_version", o.optString("app_version")),
             videoCodecs = o.optJSONArray("video_codecs")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: listOf("h264"),
+            secondaryDisplay = o.optBoolean("secondary_display"),
+            appWindow = o.optBoolean("app_window"),
             cameraSupport = o.optBoolean("camera_support"),
             projectionOnDemand = o.optBoolean("projection_on_demand"),
             cameras = o.optJSONArray("cameras").objects().map {
@@ -54,6 +56,7 @@ object Parsers {
                     facing = it.optString("facing", "back"),
                     type = it.optString("type"),
                     name = it.optString("name"),
+                    torch = it.optBoolean("torch"),
                     zoom = it.optDouble("zoom", 1.0).takeIf { z -> !z.isNaN() } ?: 1.0,
                 )
             },

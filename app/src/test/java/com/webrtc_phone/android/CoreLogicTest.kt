@@ -216,6 +216,19 @@ class ProtocolTest {
         assertEquals("SHARE_IN_USE", err.code)
     }
 
+    @Test fun virtualDisplayNegotiation() {
+        val win = org.json.JSONObject().put("width", 640).put("height", 960).put("secondary_display", true)
+        val request = org.json.JSONObject(SignalingProtocol.requestOffer("test", org.json.JSONObject(), window = win)).getJSONObject("payload")
+        assertTrue(request.getJSONObject("app_window").getBoolean("secondary_display"))
+        assertFalse(request.getJSONObject("scrcpy_options").has("app_window"))
+        val offer = SignalingProtocol.parse("""{"type":"offer","sdp":"s","camera_controls":true,"secondary_display":true,"window_device_locked":true,"window_apps":[{"package":"com.settings","name":"设置"}]}""") as SignalingMessage.Offer
+        assertEquals(mapOf("com.settings" to "设置"), offer.apps)
+        assertTrue(offer.desktop && offer.locked && offer.cameraControls)
+        val legacy = SignalingProtocol.parse("""{"type":"offer","sdp":"s"}""") as SignalingMessage.Offer
+        assertNull(legacy.apps)
+        assertFalse(legacy.desktop || legacy.cameraControls)
+    }
+
     @Test fun scrcpyOptions() {
         val ep = ServerEndpoint.parse("h")!!
         val base = StreamTarget(ep, "d", "d", StreamAuth.User("t"), settings = StreamSettings().withPreset(QualityPreset.HIGH))

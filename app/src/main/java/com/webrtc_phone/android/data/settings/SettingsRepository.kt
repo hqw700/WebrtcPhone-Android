@@ -45,6 +45,7 @@ data class StreamSettings(
     val maxBitrateMbps: Int = 20,
     val audio: Boolean = true,
     val powerOff: Boolean = false,
+    val stayAwake: Boolean = false,
     val videoCodec: VideoCodecPreference = VideoCodecPreference.H264,
 ) {
     fun withPreset(p: QualityPreset): StreamSettings =
@@ -89,6 +90,7 @@ class SettingsRepository(context: Context) {
             .putInt("s_max_bitrate", v.maxBitrateMbps)
             .putBoolean("s_audio", v.audio)
             .putBoolean("s_power_off", v.powerOff)
+            .putBoolean("s_stay_awake", v.stayAwake)
             .putString("s_video_codec", v.videoCodec.wireName)
             .apply()
         _stream.value = v
@@ -139,6 +141,7 @@ class SettingsRepository(context: Context) {
             audio = prefs.getBoolean("s_audio", d.audio),
             videoCodec = VideoCodecPreference.entries.find { it.wireName == prefs.getString("s_video_codec", null) } ?: d.videoCodec,
             powerOff = prefs.getBoolean("s_power_off", d.powerOff),
+            stayAwake = prefs.getBoolean("s_stay_awake", d.stayAwake),
         )
     }
 

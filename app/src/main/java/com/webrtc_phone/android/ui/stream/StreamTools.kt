@@ -39,6 +39,8 @@ fun toolSections(
     val t = vm.target
     val control = connected && !t.viewOnly
     val ws = t.isWs
+    val windowMode = t.mode is com.webrtc_phone.android.rtc.StreamMode.Window
+    val info = vm.session.value?.deviceInfo?.value ?: t.initialDeviceInfo
     fun close() {
         vm.panel = Panel.NONE
     }
@@ -80,6 +82,12 @@ fun toolSections(
             },
         ),
         "画面与连接" to listOfNotNull(
+            if (!ws && control && !t.isGuest && !projection && info?.secondaryDisplay == true && !windowMode)
+                ToolItem("独立副屏", Icons.Outlined.Apps, true) { close(); vm.openWindow(true) } else null,
+            if (!ws && control && !t.isGuest && !projection && info?.appWindow == true && !windowMode)
+                ToolItem("独立应用窗口", Icons.Outlined.Apps, true) { close(); vm.openWindow(false) } else null,
+            if (windowMode)
+                ToolItem("返回主屏投屏", Icons.Outlined.SwapHoriz, true) { close(); vm.switchToScreen() } else null,
             if (vm.canSwitchDevices) ToolItem("切换设备", Icons.Outlined.SwapHoriz, true) { vm.openDrawer() } else null,
             ToolItem("画质", Icons.Outlined.HighQuality, true) { vm.panel = Panel.QUALITY },
             if (!t.isCamera && !ws && !projection && !t.isGuest) ToolItem(
@@ -91,7 +99,7 @@ fun toolSections(
                 vm.switchCamera(CameraParams())
             } else null,
             // 传输切换：WS ⇄ WebRTC（分享访客只能用进入时的方式，不提供切换）
-            if (!t.isGuest && !projection) ToolItem(
+            if (!t.isGuest && !projection && !windowMode) ToolItem(
                 if (ws) "切到 WebRTC" else "切到 WS 模式",
                 Icons.Outlined.Bolt, true,
             ) {

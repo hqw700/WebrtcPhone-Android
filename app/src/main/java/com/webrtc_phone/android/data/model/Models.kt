@@ -40,6 +40,7 @@ data class CameraLens(
     val type: String,
     val name: String,
     val zoom: Double,
+    val torch: Boolean = false,
 )
 
 data class DeviceInfo(
@@ -56,6 +57,8 @@ data class DeviceInfo(
     val displays: List<DisplayInfo> = emptyList(),
     val projectionOnDemand: Boolean = false,
     val videoCodecs: List<String> = listOf("h264"),
+    val secondaryDisplay: Boolean = false,
+    val appWindow: Boolean = false,
 ) {
     val primaryDisplay: DisplayInfo? get() = displays.firstOrNull()
     val title: String

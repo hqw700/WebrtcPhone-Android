@@ -60,6 +60,7 @@ import com.webrtc_phone.android.rtc.CameraParams
 import com.webrtc_phone.android.rtc.channel.Keys
 import com.webrtc_phone.android.ui.home.CameraResolutions
 import com.webrtc_phone.android.ui.home.lensOptions
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 
 /** 虚拟导航键：返回 / 主页 / 多任务（长按主页 = 语音助手，长按返回 = 菜单） */
@@ -156,15 +157,35 @@ fun CameraBar(
     onExit: () -> Unit,
 ) {
     val p = vm.cameraParams ?: return
+    val session by vm.session.collectAsStateWithLifecycle()
+    val controls = session?.cameraControls?.collectAsStateWithLifecycle()?.value == true
+    val ready = session?.inputReady?.collectAsStateWithLifecycle()?.value == true
+    val canControl = controls && ready && !vm.target.viewOnly
     val lenses = remember(device) { device?.let { lensOptions(it) } ?: lensOptions(fakeDevice()) }
     val chip = FilterChipDefaults.filterChipColors(
         labelColor = Color.White, selectedContainerColor = Color.White, selectedLabelColor = Color.Black,
     )
     Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.85f)).padding(vertical = 6.dp)) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            session?.let { rtc ->
+                if (canControl) {
+                    val active = lenses.firstOrNull { it.lens.id == p.cameraId && kotlin.math.abs(it.lens.zoom - p.zoom) < 0.01 }
+                    val actions = buildList {
+                        add("拉近" to "zoom_in")
+                        add("拉远" to "zoom_out")
+                        if (active?.lens?.torch == true) {
+                            add("开补光" to "torch_on")
+                            add("关补光" to "torch_off")
+                        }
+                    }
+                    actions.forEach { (label, action) ->
+                        FilterChip(false, { rtc.cameraCommand(action) }, label = { Text(label) }, colors = chip)
+                    }
+                }
+            }
             lenses.forEach { o ->
                 val sel = if (o.lens.facing != p.facing) false
-                    else if (o.lens.facing == "back") kotlin.math.abs(o.lens.zoom - p.zoom) < 0.15
+                    else if (o.lens.facing == "back") o.lens.id == p.cameraId && kotlin.math.abs(o.lens.zoom - p.zoom) < 0.01
                     else o.lens.id == p.cameraId || p.cameraId.isBlank()
                 FilterChip(
                     selected = sel,
@@ -193,14 +214,23 @@ fun CameraBar(
                 )
             }
         }
+        if (canControl) {
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+                listOf("返回" to Keys.BACK, "主页" to Keys.HOME, "最近任务" to Keys.APP_SWITCH, "音量+" to Keys.VOLUME_UP,
+                    "音量−" to Keys.VOLUME_DOWN, "电源" to Keys.POWER).forEach { (label, key) ->
+                    FilterChip(false, { vm.press(key) }, label = { Text(label) }, colors = chip)
+                }
+            }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             BarIcon(if (vm.audioOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff, "环境音") { vm.toggleAudio() }
             BarIcon(Icons.Filled.Flip, "镜像") { vm.mirrored = !vm.mirrored }
             BarIcon(Icons.Filled.CameraAlt, "抓拍", big = true, onClick = onSnapshot)
             BarIcon(Icons.Filled.FlipCameraAndroid, "翻转") {
-                val front = p.facing == "front"
-                vm.toast(if (front) "正在切换至后置主摄…" else "正在切换至前置自拍…")
-                vm.switchCamera(p.copy(facing = if (front) "back" else "front", cameraId = if (front) "0" else "1", zoom = 1.0))
+                val facing = if (p.facing == "front") "back" else "front"
+                val next = lenses.filter { it.lens.facing == facing }.minByOrNull { kotlin.math.abs(it.lens.zoom - 1.0) }
+                if (next == null) vm.toast("设备未上报可切换镜头")
+                else vm.switchCamera(p.copy(facing = facing, cameraId = next.lens.id, zoom = next.lens.zoom))
             }
             BarIcon(Icons.Filled.PhoneAndroid, "切回屏幕") { vm.switchToScreen() }
             BarIcon(Icons.Filled.Close, "退出", onClick = onExit)

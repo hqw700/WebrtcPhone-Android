@@ -171,6 +171,7 @@ fun HomeScreen(vm: HomeViewModel, navigate: (String) -> Unit) {
             onOpen = { launch(vm.targetFor(d)) },
             onOpenWs = { launch(vm.targetFor(d, transport = com.webrtc_phone.android.rtc.StreamTransport.WEBSOCKET)) },
             onCamera = { cameraFor = d },
+            onWindow = { desktop -> launch(vm.targetFor(d).copy(mode = com.webrtc_phone.android.rtc.StreamMode.Window(desktop))) },
             onShare = { navigate(Routes.shares(d.id, create = true)) },
             onTags = { tagsFor = d },
             onSetAlias = { newAlias -> vm.setDeviceAlias(d.id, newAlias) },

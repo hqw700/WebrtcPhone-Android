@@ -104,6 +104,21 @@ class RtcSession(
     private var adbChannel: SafeChannel? = null
     private val agentChannels = mutableListOf<SafeChannel>()
 
+    val windowApps = MutableStateFlow<Map<String, String>>(emptyMap())
+    val windowIcons = MutableStateFlow<Map<String, String>>(emptyMap())
+    val windowNotice = MutableStateFlow("")
+    val cameraControls = MutableStateFlow(false)
+
+    fun windowCommand(command: org.json.JSONObject): Boolean =
+        target.mode is StreamMode.Window && !target.viewOnly &&
+            inputChannel?.send(command.put("type", "app_window").toString()) == true
+
+    fun cameraCommand(action: String) {
+        if (target.isCamera && cameraControls.value && !target.viewOnly) {
+            inputChannel?.send(org.json.JSONObject().put("type", "camera_control").put("camera_action", action).toString())
+        }
+    }
+
     val input = InputProtocol(
         sender = { text -> inputChannel?.send(text) ?: false },
         viewOnly = { target.viewOnly },
@@ -287,6 +302,16 @@ class RtcSession(
             }
             is SignalingMessage.Offer -> {
                 explicitSessionClose = msg.videoCodec.isNotEmpty()
+                val mode = target.mode as? StreamMode.Window
+                if (mode != null) {
+                    if (msg.apps == null || (mode.desktop && !msg.desktop)) {
+                        fail("设备或信令不支持此虚拟显示", retryable = false)
+                        return
+                    }
+                    windowApps.value = msg.apps
+                    windowNotice.value = if (msg.locked) "设备已锁屏，若无法操作请先解锁" else ""
+                }
+                cameraControls.value = msg.cameraControls
                 onRemoteOffer(msg.sdp)
             }
             is SignalingMessage.Answer -> pc?.setRemoteDescription(
@@ -311,7 +336,13 @@ class RtcSession(
     private fun requestVideoOffer() {
         val options = ScrcpyOptions.build(target).put("video_codec", requestedCodec)
         if (requestedCodec != "h264") options.put("video_codec_options", "")
-        signaling?.send(SignalingProtocol.requestOffer(target.deviceId, options, projectionResumeKey))
+        val window = (target.mode as? StreamMode.Window)?.let {
+            val metrics = context.resources.displayMetrics
+            org.json.JSONObject().put("width", metrics.widthPixels.coerceIn(128, 4096))
+                .put("height", metrics.heightPixels.coerceIn(128, 4096))
+                .put("secondary_display", it.desktop).put("icons", it.desktop)
+        }
+        signaling?.send(SignalingProtocol.requestOffer(target.deviceId, options, projectionResumeKey, window))
     }
 
     private fun createPeerConnection(cfg: SignalingMessage.Config) {
@@ -459,7 +490,7 @@ class RtcSession(
         }
         // 连通但迟迟没有画面：通常是设备端采集失败（摄像头被占用/HAL 异常、编码器启动失败），
         // 给出明确提示而不是无限转圈
-        if (firstFrameTask == null && !_firstFrame.value) {
+        if (target.mode !is StreamMode.Window && firstFrameTask == null && !_firstFrame.value) {
             firstFrameTask = executor.schedule({
                 if (!closed && !_firstFrame.value) {
                     fail(
@@ -497,6 +528,18 @@ class RtcSession(
             "input-channel" -> {
                 inputChannel = ch
                 ch.observe(object : SafeChannel.Listener {
+                    override fun onMessage(data: ByteArray, binary: Boolean) {
+                        if (binary || target.mode !is StreamMode.Window) return
+                        val reply = runCatching { org.json.JSONObject(String(data, Charsets.UTF_8)) }.getOrNull() ?: return
+                        when (reply.optString("type")) {
+                            "window_app_icon" -> {
+                                val pkg = reply.optString("package")
+                                val png = reply.optString("png")
+                                if (pkg in windowApps.value && png.length in 1..16384) windowIcons.value += pkg to png
+                            }
+                            "app_window_error" -> windowNotice.value = reply.optString("message")
+                        }
+                    }
                     override fun onState(state: DataChannel.State) {
                         _inputReady.value = state == DataChannel.State.OPEN
                     }

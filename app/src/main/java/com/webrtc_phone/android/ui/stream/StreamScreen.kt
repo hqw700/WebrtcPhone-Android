@@ -117,7 +117,9 @@ fun StreamScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val showNav = app.showNavBar && !t.isCamera && !t.viewOnly && !vm.fullscreen
         val body: @Composable (Modifier) -> Unit = { m ->
-            VideoArea(videoView, ratio, if (t.isCamera) vm.cameraZoom else 1f, m)
+            if (t.mode is com.webrtc_phone.android.rtc.StreamMode.Window && session != null) {
+                WindowArea(vm, session!!, m) { VideoArea(videoView, ratio, 1f, Modifier.fillMaxSize()) }
+            } else VideoArea(videoView, ratio, if (t.isCamera) vm.cameraZoom else 1f, m)
         }
         // 不含 IME insets：弹出键盘时画面保持不动，只有输入条/终端随键盘上移
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
@@ -167,7 +169,7 @@ fun StreamScreen(
         when (val p = phase) {
             is ConnectionPhase.Failed -> FailedOverlay(p, onRetry = vm::reconnect, onExit = onExit)
             ConnectionPhase.Closed -> FailedOverlay(ConnectionPhase.Failed("会话已结束", retryable = true), onRetry = vm::reconnect, onExit = onExit)
-            else -> if (!firstFrame) ConnectingOverlay(p, retry, t.deviceName, onExit)
+            else -> if (!firstFrame && !(t.mode is com.webrtc_phone.android.rtc.StreamMode.Window && connected)) ConnectingOverlay(p, retry, t.deviceName, onExit)
         }
     }
     }

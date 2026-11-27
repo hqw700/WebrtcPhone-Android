@@ -218,6 +218,7 @@ fun AppSettingsScreen(repo: SettingsRepository, onBack: () -> Unit) {
                 SwitchRow("显示虚拟导航键", a.showNavBar, { b -> repo.updateApp { it.copy(showNavBar = b) } }, "画面下方显示 返回/主页/多任务", Icons.Outlined.ViewAgenda)
                 SwitchRow("显示性能指标", a.showStats, { b -> repo.updateApp { it.copy(showStats = b) } }, "延迟、帧率、码率、丢包实时浮层", Icons.Outlined.Insights)
                 SwitchRow("投屏时保持亮屏", a.keepScreenOn, { b -> repo.updateApp { it.copy(keepScreenOn = b) } }, null, Icons.Outlined.ScreenLockPortrait)
+                SwitchRow("保持被控设备唤醒", s.stayAwake, { b -> repo.updateStream { it.copy(stayAwake = b) } }, null, Icons.Outlined.ScreenLockPortrait)
                 SwitchRow("开启息屏连接", s.powerOff, { b -> repo.updateStream { it.copy(powerOff = b) } }, "唤醒录屏后自动切断真机显示背光 (防窥省电)", Icons.Outlined.DarkMode)
                 SwitchRow("触控振动反馈", a.haptics, { b -> repo.updateApp { it.copy(haptics = b) } }, null, Icons.Outlined.Vibration)
                 SwitchRow("剪贴板双向同步", a.clipboardSync, { b -> repo.updateApp { it.copy(clipboardSync = b) } }, "本机复制自动同步到云手机，反之亦然", Icons.Outlined.ContentPaste)

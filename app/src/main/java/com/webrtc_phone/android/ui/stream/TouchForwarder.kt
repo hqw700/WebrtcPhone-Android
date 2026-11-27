@@ -32,6 +32,7 @@ class TouchForwarder(
      */
     private fun targetSize(): Pair<Int, Int>? {
         val video = vm.videoSize.value ?: return null
+        if (vm.target.mode is com.webrtc_phone.android.rtc.StreamMode.Window) return video
         val display = vm.session.value?.deviceInfo?.value?.primaryDisplay?.let { it.width to it.height }
             ?: vm.target.displayHint
             ?: return video
