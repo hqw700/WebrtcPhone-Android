@@ -170,16 +170,9 @@ fun CameraBar(
             session?.let { rtc ->
                 if (canControl) {
                     val active = lenses.firstOrNull { it.lens.id == p.cameraId && kotlin.math.abs(it.lens.zoom - p.zoom) < 0.01 }
-                    val actions = buildList {
-                        add("拉近" to "zoom_in")
-                        add("拉远" to "zoom_out")
-                        if (active?.lens?.torch == true) {
-                            add("开补光" to "torch_on")
-                            add("关补光" to "torch_off")
-                        }
-                    }
-                    actions.forEach { (label, action) ->
-                        FilterChip(false, { rtc.cameraCommand(action) }, label = { Text(label) }, colors = chip)
+                    if (active?.lens?.torch == true) {
+                        FilterChip(false, { rtc.cameraCommand("torch_on") }, label = { Text("开补光") }, colors = chip)
+                        FilterChip(false, { rtc.cameraCommand("torch_off") }, label = { Text("关补光") }, colors = chip)
                     }
                 }
             }
@@ -212,14 +205,6 @@ fun CameraBar(
                     label = { Text(label) },
                     colors = chip
                 )
-            }
-        }
-        if (canControl) {
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
-                listOf("返回" to Keys.BACK, "主页" to Keys.HOME, "最近任务" to Keys.APP_SWITCH, "音量+" to Keys.VOLUME_UP,
-                    "音量−" to Keys.VOLUME_DOWN, "电源" to Keys.POWER).forEach { (label, key) ->
-                    FilterChip(false, { vm.press(key) }, label = { Text(label) }, colors = chip)
-                }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {

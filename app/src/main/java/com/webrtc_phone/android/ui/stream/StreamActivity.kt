@@ -131,13 +131,32 @@ class StreamActivity : ComponentActivity() {
         val forwarder = TouchForwarder(vm) {
             if (vm.settings.app.value.haptics) videoView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         }
-        // 摄像头模式：双指捏合 = 数字变焦（1x–8x）
+        // scrcpy 的每档变焦倍率为 17/16，保留不足一档的手势位移。
+        val zoomStep = kotlin.math.ln(17.0 / 16.0)
         val scale = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(d: ScaleGestureDetector): Boolean {
-                vm.cameraZoom = (vm.cameraZoom * d.scaleFactor).coerceIn(1f, 8f)
+            private var remainder = 0.0
+            override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+                remainder = 0.0
                 return true
             }
-        })
+
+            override fun onScale(d: ScaleGestureDetector): Boolean {
+                val factor = d.scaleFactor
+                if (!factor.isFinite() || factor <= 0f) return false
+                val rtc = vm.session.value
+                if (rtc != null && rtc.cameraControls.value && rtc.inputReady.value && !vm.target.viewOnly) {
+                    remainder += kotlin.math.ln(factor.toDouble()) / zoomStep
+                    val steps = remainder.toInt()
+                    remainder -= steps
+                    repeat(kotlin.math.abs(steps)) {
+                        rtc.cameraCommand(if (steps > 0) "zoom_in" else "zoom_out")
+                    }
+                } else {
+                    vm.cameraZoom = (vm.cameraZoom * factor).coerceIn(1f, 8f)
+                }
+                return true
+            }
+        }).apply { isQuickScaleEnabled = false }
         videoView.setOnTouchListener { v, e ->
             if (vm.target.isCamera) {
                 scale.onTouchEvent(e)
