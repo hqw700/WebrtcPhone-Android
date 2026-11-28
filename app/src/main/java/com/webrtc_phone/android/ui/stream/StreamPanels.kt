@@ -205,7 +205,7 @@ fun InfoPanel(vm: StreamViewModel) {
         "服务器" to t.endpoint.display,
         "身份" to if (t.isGuest) "卡密访客 · ${t.accessMode.label}" else "登录用户",
         "画面" to (size?.let { "${it.first} × ${it.second}" } ?: "-"),
-        "编码" to "${st.codec.ifBlank { "-" }} ${st.decoder}".trim(),
+        "编码" to "${st.codecLabel} ${st.decoder}".trim(),
         "网络" to listOf(st.networkLabel, st.protocol.uppercase()).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "-" },
         "延迟" to if (st.latencyMs > 0) "${st.latencyMs} ms (RTT ${st.rttMs} ms)" else "-",
         "帧率" to "${st.fps} fps",
@@ -274,7 +274,8 @@ fun StatsHud(st: StreamStats, modifier: Modifier = Modifier) {
                 append(if (st.latencyMs > 0) "${st.latencyMs}ms" else "--")
                 append("  ${st.fps}fps  ${Formatters.bitrate(st.bitrateBps)}")
                 if (st.packetLossPct >= 0.1f) append("  丢包%.1f%%".format(st.packetLossPct))
-                if (st.networkLabel.isNotBlank()) append("\n${st.networkLabel}")
+                append("\n编码 ${st.codecLabel}")
+                if (st.networkLabel.isNotBlank()) append("  ${st.networkLabel}")
                 if (st.width > 0) append("  ${st.width}×${st.height}")
             },
             style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace,

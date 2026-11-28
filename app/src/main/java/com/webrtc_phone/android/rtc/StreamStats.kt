@@ -24,6 +24,13 @@ data class StreamStats(
     val latencyMs: Int
         get() = if (rttMs == 0 && jitterBufferMs == 0) 0 else rttMs / 2 + jitterBufferMs + decodeMs + 8
 
+    val codecLabel: String
+        get() = when (codec.uppercase()) {
+            "H264", "AVC" -> "H.264"
+            "H265", "HEVC" -> "H.265"
+            else -> codec.uppercase().ifBlank { "—" }
+        }
+
     val networkLabel: String
         get() = when (candidateType) {
             "host" -> "局域网直连"

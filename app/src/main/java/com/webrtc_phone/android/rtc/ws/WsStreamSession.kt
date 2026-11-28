@@ -58,7 +58,7 @@ class WsStreamSession(
     @Volatile private var ws: WebSocket? = null
     @Volatile private var surface: Surface? = null
     @Volatile private var codec: MediaCodec? = null
-    @Volatile private var configured = false
+    @Volatile private var configuredCodec = ""
     @Volatile private var gotKeyFrame = false
     @Volatile private var closed = false
 
@@ -253,7 +253,7 @@ class WsStreamSession(
             mc.configure(format, s, null, 0)
             mc.start()
             codec = mc
-            configured = true
+            configuredCodec = if (activeHEVC) "H265" else "H264"
             mc
         } catch (e: Exception) {
             Log.e(TAG, "codec create failed: ${e.message}")
@@ -265,7 +265,7 @@ class WsStreamSession(
     private fun releaseCodec() {
         val c = codec
         codec = null
-        configured = false
+        configuredCodec = ""
         runCatching { c?.stop() }
         runCatching { c?.release() }
     }
@@ -278,7 +278,7 @@ class WsStreamSession(
         lastStatsMs = now
         val size = _videoSize.value
         _stats.value = _stats.value.copy(
-            codec = if (activeHEVC) "H265" else "H264",
+            codec = configuredCodec,
             fps = (frames * 1000 / dt).toInt(),
             bitrateBps = bytes * 8 * 1000 / dt,
             width = size?.first ?: 0,

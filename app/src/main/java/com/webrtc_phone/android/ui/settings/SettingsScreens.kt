@@ -216,7 +216,7 @@ fun AppSettingsScreen(repo: SettingsRepository, onBack: () -> Unit) {
             }
             SectionCard(title = "投屏") {
                 SwitchRow("显示虚拟导航键", a.showNavBar, { b -> repo.updateApp { it.copy(showNavBar = b) } }, "画面下方显示 返回/主页/多任务", Icons.Outlined.ViewAgenda)
-                SwitchRow("显示性能指标", a.showStats, { b -> repo.updateApp { it.copy(showStats = b) } }, "延迟、帧率、码率、丢包实时浮层", Icons.Outlined.Insights)
+                SwitchRow("显示性能指标", a.showStats, { b -> repo.updateApp { it.copy(showStats = b) } }, "实时显示视频编码、延迟、帧率、码率和丢包", Icons.Outlined.Insights)
                 SwitchRow("投屏时保持亮屏", a.keepScreenOn, { b -> repo.updateApp { it.copy(keepScreenOn = b) } }, null, Icons.Outlined.ScreenLockPortrait)
                 SwitchRow("保持被控设备唤醒", s.stayAwake, { b -> repo.updateStream { it.copy(stayAwake = b) } }, null, Icons.Outlined.ScreenLockPortrait)
                 SwitchRow("开启息屏连接", s.powerOff, { b -> repo.updateStream { it.copy(powerOff = b) } }, "唤醒录屏后自动切断真机显示背光 (防窥省电)", Icons.Outlined.DarkMode)
