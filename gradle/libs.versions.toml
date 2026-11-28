@@ -7,7 +7,7 @@ lifecycle = "2.8.7"
 navigation = "2.8.5"
 composeBom = "2024.12.01"
 coroutines = "1.9.0"
-webrtc = "123.0.0"
+webrtc = "144.7559.15"
 okhttp = "4.12.0"
 junit = "4.13.2"
 orgJson = "20240303"
@@ -30,7 +30,7 @@ compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
-webrtc = { group = "com.dafruits", name = "webrtc", version.ref = "webrtc" }
+webrtc = { group = "io.github.webrtc-sdk", name = "android", version.ref = "webrtc" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
 shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
