@@ -1,5 +1,6 @@
 # WebRTC (JNI 反射调用 Java 层，必须整体保留)
 -keep class org.webrtc.** { *; }
+-keep class org.jni_zero.** { *; }
 -dontwarn org.webrtc.**
 
 # Shizuku 的兼容进程入口由反射调用。
