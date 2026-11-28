@@ -75,7 +75,7 @@ fun DeviceActionSheet(
     onOpen: () -> Unit,
     onOpenWs: () -> Unit,
     onCamera: () -> Unit,
-    onWindow: (Boolean) -> Unit,
+    onSecondaryDisplay: () -> Unit,
     onShare: () -> Unit,
     onTags: () -> Unit,
     onSetAlias: ((String) -> Unit)? = null,
@@ -103,8 +103,7 @@ fun DeviceActionSheet(
             Spacer(Modifier.height(8.dp))
             SettingRow(if (device.info.projectionOnDemand) "请求投屏" else "进入投屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onOpen() })
             if (!device.info.projectionOnDemand) {
-                if (device.info.secondaryDisplay) SettingRow("独立副屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onWindow(true) })
-                if (device.info.appWindow) SettingRow("独立应用窗口", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onWindow(false) })
+                if (device.info.secondaryDisplay) SettingRow("独立副屏", icon = Icons.Outlined.CastConnected, enabled = device.online, onClick = { onDismiss(); onSecondaryDisplay() })
                 SettingRow(
                     "WS 模式投屏", "WebSocket 中转，免 P2P 穿透（视频+直控）",
                     icon = Icons.Outlined.Bolt, enabled = device.online,

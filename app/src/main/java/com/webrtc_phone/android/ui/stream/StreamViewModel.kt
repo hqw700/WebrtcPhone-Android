@@ -268,9 +268,9 @@ class StreamViewModel(private val c: AppContainer, initial: StreamTarget) : View
     // ---------- 按键 ----------
 
     var showWindowApps by mutableStateOf(true)
-    fun openWindow(desktop: Boolean) = reconnectWith(target.copy(mode = StreamMode.Window(desktop)))
+    fun openSecondaryDisplay() = reconnectWith(target.copy(mode = StreamMode.SecondaryDisplay))
     fun press(key: Int) {
-        if (key == Keys.HOME && target.mode is StreamMode.Window) {
+        if (key == Keys.HOME && target.mode is StreamMode.SecondaryDisplay) {
             showWindowApps = true
             return
         }

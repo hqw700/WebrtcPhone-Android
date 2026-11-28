@@ -169,7 +169,7 @@ class StreamActivity : ComponentActivity() {
     private fun applyOrientation() {
         val mode = vm.settings.app.value.orientationLock
         val size = vm.videoSize.value
-        val orientation = if (vm.target.mode is com.webrtc_phone.android.rtc.StreamMode.Window && mode !in listOf("portrait", "landscape")) ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR else when (mode) {
+        val orientation = if (vm.target.mode is com.webrtc_phone.android.rtc.StreamMode.SecondaryDisplay && mode !in listOf("portrait", "landscape")) ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR else when (mode) {
             "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             "sensor" -> ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR

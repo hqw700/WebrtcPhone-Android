@@ -27,7 +27,7 @@ object ScrcpyOptions {
             .put("stay_awake", s.stayAwake)
 
         when (val m = target.mode) {
-            StreamMode.Screen, is StreamMode.Window -> o.put("video_source", "display")
+            StreamMode.Screen, is StreamMode.SecondaryDisplay -> o.put("video_source", "display")
             is StreamMode.Camera -> {
                 val c = m.params
                 o.put("video_source", "camera")

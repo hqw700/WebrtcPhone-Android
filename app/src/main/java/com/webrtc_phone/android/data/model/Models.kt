@@ -58,7 +58,6 @@ data class DeviceInfo(
     val projectionOnDemand: Boolean = false,
     val videoCodecs: List<String> = listOf("h264"),
     val secondaryDisplay: Boolean = false,
-    val appWindow: Boolean = false,
 ) {
     val primaryDisplay: DisplayInfo? get() = displays.firstOrNull()
     val title: String

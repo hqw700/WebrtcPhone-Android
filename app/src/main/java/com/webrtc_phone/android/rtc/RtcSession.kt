@@ -110,7 +110,7 @@ class RtcSession(
     val cameraControls = MutableStateFlow(false)
 
     fun windowCommand(command: org.json.JSONObject): Boolean =
-        target.mode is StreamMode.Window && !target.viewOnly &&
+        target.mode is StreamMode.SecondaryDisplay && !target.viewOnly &&
             inputChannel?.send(command.put("type", "app_window").toString()) == true
 
     fun cameraCommand(action: String) {
@@ -302,9 +302,8 @@ class RtcSession(
             }
             is SignalingMessage.Offer -> {
                 explicitSessionClose = msg.videoCodec.isNotEmpty()
-                val mode = target.mode as? StreamMode.Window
-                if (mode != null) {
-                    if (msg.apps == null || (mode.desktop && !msg.desktop)) {
+                if (target.mode == StreamMode.SecondaryDisplay) {
+                    if (msg.apps == null || !msg.desktop) {
                         fail("设备或信令不支持此虚拟显示", retryable = false)
                         return
                     }
@@ -336,12 +335,12 @@ class RtcSession(
     private fun requestVideoOffer() {
         val options = ScrcpyOptions.build(target).put("video_codec", requestedCodec)
         if (requestedCodec != "h264") options.put("video_codec_options", "")
-        val window = (target.mode as? StreamMode.Window)?.let {
+        val window = if (target.mode == StreamMode.SecondaryDisplay) {
             val metrics = context.resources.displayMetrics
             org.json.JSONObject().put("width", metrics.widthPixels.coerceIn(128, 4096))
                 .put("height", metrics.heightPixels.coerceIn(128, 4096))
-                .put("secondary_display", it.desktop).put("icons", it.desktop)
-        }
+                .put("secondary_display", true).put("icons", true)
+        } else null
         signaling?.send(SignalingProtocol.requestOffer(target.deviceId, options, projectionResumeKey, window))
     }
 
@@ -490,7 +489,7 @@ class RtcSession(
         }
         // 连通但迟迟没有画面：通常是设备端采集失败（摄像头被占用/HAL 异常、编码器启动失败），
         // 给出明确提示而不是无限转圈
-        if (target.mode !is StreamMode.Window && firstFrameTask == null && !_firstFrame.value) {
+        if (target.mode !is StreamMode.SecondaryDisplay && firstFrameTask == null && !_firstFrame.value) {
             firstFrameTask = executor.schedule({
                 if (!closed && !_firstFrame.value) {
                     fail(
@@ -529,7 +528,7 @@ class RtcSession(
                 inputChannel = ch
                 ch.observe(object : SafeChannel.Listener {
                     override fun onMessage(data: ByteArray, binary: Boolean) {
-                        if (binary || target.mode !is StreamMode.Window) return
+                        if (binary || target.mode !is StreamMode.SecondaryDisplay) return
                         val reply = runCatching { org.json.JSONObject(String(data, Charsets.UTF_8)) }.getOrNull() ?: return
                         when (reply.optString("type")) {
                             "window_app_icon" -> {

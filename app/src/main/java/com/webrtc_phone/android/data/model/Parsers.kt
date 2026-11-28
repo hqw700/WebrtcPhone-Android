@@ -47,7 +47,6 @@ object Parsers {
             agentVersion = o.optString("agent_version", o.optString("app_version")),
             videoCodecs = o.optJSONArray("video_codecs")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: listOf("h264"),
             secondaryDisplay = o.optBoolean("secondary_display"),
-            appWindow = o.optBoolean("app_window"),
             cameraSupport = o.optBoolean("camera_support"),
             projectionOnDemand = o.optBoolean("projection_on_demand"),
             cameras = o.optJSONArray("cameras").objects().map {

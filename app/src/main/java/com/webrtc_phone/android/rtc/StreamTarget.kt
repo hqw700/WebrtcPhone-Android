@@ -26,7 +26,7 @@ data class CameraParams(
 )
 
 sealed interface StreamMode {
-    data class Window(val desktop: Boolean) : StreamMode
+    data object SecondaryDisplay : StreamMode
     data object Screen : StreamMode
     data class Camera(val params: CameraParams) : StreamMode
 }
